@@ -1,0 +1,46 @@
+-- agent_unguarded.smv
+-- Reference model: MCP-style tool-using agent with no policy enforcement.
+-- Interface: docs/interface.md. Properties: properties/safety.ltl (appended by the Makefile).
+--
+-- The LLM is modeled as a free choice of the next tool action (`proposed`). Nothing filters it,
+-- so `action` is whatever the agent proposes. The attacker is a separate free input
+-- (`attacker_injects`) that decides whether an untrusted read carries a prompt injection.
+-- Every property in safety.ltl is expected to FAIL on this model.
+
+MODULE main
+
+VAR
+  -- canonical interface
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;             -- environment input: explicit grant present this step
+
+  -- agent: the LLM's unconstrained choice of tool call
+  proposed   : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+  -- attacker: does an untrusted read at this step carry an injection?
+  attacker_injects : boolean;
+
+ASSIGN
+  -- no policy layer: the proposed action executes as-is
+  action := proposed;
+
+  -- taint enters on an injected untrusted read and never leaves
+  init(tainted) := FALSE;
+  next(tainted) := tainted | (action = read_untrusted & attacker_injects);
+
+  -- one-step flag: TRUE right after a confirm
+  init(confirmed) := FALSE;
+  next(confirmed) := action = confirm;
+
+  -- requesting privilege always succeeds, grant or not
+  init(privileged) := FALSE;
+  next(privileged) :=
+    case
+      action = request_grant : TRUE;
+      TRUE                   : privileged;
+    esac;
+
+  -- grant, proposed, attacker_injects: unconstrained inputs

@@ -1,0 +1,53 @@
+-- agent_guarded.smv
+-- Reference model: the same agent and attacker as agent_unguarded.smv, plus a policy layer
+-- between the LLM's proposal and execution.
+-- Interface: docs/interface.md. Properties: properties/safety.ltl (appended by the Makefile).
+--
+-- Policy:
+--   1. send_external is blocked while tainted.
+--   2. delete is blocked unless the previous step was confirm (confirmed = TRUE).
+--   3. request_grant sets privileged only when grant is TRUE.
+-- A blocked proposal executes as idle. Every property in safety.ltl is expected to HOLD.
+
+MODULE main
+
+VAR
+  -- canonical interface
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;             -- environment input: explicit grant present this step
+
+  -- agent: the LLM's unconstrained choice of tool call
+  proposed   : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+  -- attacker: does an untrusted read at this step carry an injection?
+  attacker_injects : boolean;
+
+ASSIGN
+  -- policy layer: filter the proposal
+  action :=
+    case
+      proposed = send_external & tainted : idle;   -- policy 1
+      proposed = delete & !confirmed     : idle;   -- policy 2
+      TRUE                               : proposed;
+    esac;
+
+  -- taint enters on an injected untrusted read and never leaves
+  init(tainted) := FALSE;
+  next(tainted) := tainted | (action = read_untrusted & attacker_injects);
+
+  -- one-step flag: TRUE right after a confirm
+  init(confirmed) := FALSE;
+  next(confirmed) := action = confirm;
+
+  -- policy 3: privilege only with an explicit grant
+  init(privileged) := FALSE;
+  next(privileged) :=
+    case
+      action = request_grant & grant : TRUE;
+      TRUE                           : privileged;
+    esac;
+
+  -- grant, proposed, attacker_injects: unconstrained inputs
