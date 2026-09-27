@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Secrets and environment files. Never commit these.
+.env
+.env.*
+credentials/
+secrets/
+*.pem
+*.key
+
+# nuXmv output and the temporary model+property files the Makefile builds
+traces/*.out
+traces/*.smv
+
+# Model checker binaries and archives are not redistributable
+/nuXmv
+/NuSMV
+/bin/
+nuXmv-*/
+NuSMV-*/
+*.tar.xz
+*.tar.gz
+*.zip
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

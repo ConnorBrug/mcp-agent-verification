@@ -1,0 +1,5 @@
+# eval/parse_trace.py uses only the standard library (Python 3.9+).
+# The packages below are for the schema-to-SMV pipeline.
+anthropic      # LLM client for generating SMV models from tool schemas
+jsonschema     # validate MCP tool schemas before translation
+pytest         # tests for pipeline and eval code

@@ -1,0 +1,2 @@
+# Makefile and scripts run under Linux/WSL. Keep LF everywhere.
+* text=auto eol=lf
