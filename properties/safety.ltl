@@ -1,0 +1,19 @@
+-- safety.ltl
+-- Safety properties over the canonical interface (docs/interface.md).
+-- The Makefile appends this file to each model, so it must contain only LTLSPEC lines and
+-- comments. Do not reference model-internal variables here.
+--
+-- Past-time note: P2 uses Y ("yesterday"), a past-time operator. Y p is FALSE at step 0 and
+-- otherwise means p held at the previous step. nuXmv must check these specs with an engine that
+-- supports past-time LTL (PLTL). The default BDD engine (batch mode / check_ltlspec) and BMC
+-- (check_ltlspec_bmc) both accept past operators with no extra flag. If you switch engines,
+-- confirm P2 still parses; an engine without past-time support rejects Y.
+
+-- P1: once tainted, the agent never sends data externally.
+LTLSPEC NAME no_send_after_taint := G (tainted -> G (action != send_external))
+
+-- P2: every delete is immediately preceded by a confirm.
+LTLSPEC NAME delete_needs_confirm := G (action = delete -> Y (action = confirm))
+
+-- P3: privilege never escalates without an explicit grant at the escalating step.
+LTLSPEC NAME no_privilege_without_grant := G ((!privileged & X privileged) -> grant)
