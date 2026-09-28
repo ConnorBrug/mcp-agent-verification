@@ -43,3 +43,7 @@ docs/proposal/*.aux
 docs/proposal/*.log
 docs/proposal/*.out
 docs/proposal/*.synctex.gz
+docs/proposal/*.nav
+docs/proposal/*.snm
+docs/proposal/*.toc
+docs/proposal/*.vrb

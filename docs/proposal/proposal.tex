@@ -16,7 +16,7 @@
 \setlength{\parskip}{0.5ex}
 
 % ---- Fill these in before submitting ----------------------------------------
-\newcommand{\groupletter}{\textcolor{red}{[B or D]}}
+\newcommand{\groupletter}{B}
 \newcommand{\memberA}{Teo Kitanovski}
 \newcommand{\memberB}{Connor Brugger}
 \newcommand{\memberC}{Xiaodi Shao}
@@ -131,6 +131,8 @@ how well it does.
   server's tool definitions are in its source.
 \item We write the 5 reference models and the property file ourselves. nuXmv produces the
   counterexamples from them.
+\item Neither dataset needs credentialing. Model generation and agent-driven replay call a
+  commercial LLM API, with the cost cap described in Section~8.
 \end{itemize}
 
 \section{Success criterion}
@@ -152,7 +154,9 @@ before anyone trusts their safety verdicts. We would then report which propertie
 mappings the LLM got wrong. If fewer than 70\% of the RQ2 violations are confirmed, checking
 LLM-written models mostly finds translation errors and not attacks. If counterexample traces
 reproduce no more often than random ones, our abstraction is too coarse to predict how real agents
-fail, and we report how many traces were spurious.
+fail, and we report how many traces were spurious. Each of these outcomes is still worth
+reporting. People are starting to ask LLMs to write formal models, and a measured failure shows
+where that breaks and which kinds of tools or properties cause it.
 
 \section{Responsibility breakdown}
 \begin{tabularx}{\linewidth}{@{}lX@{}}
