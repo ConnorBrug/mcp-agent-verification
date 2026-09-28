@@ -36,3 +36,15 @@ Entry format:
   `confirmed` flag) are what the team wants, and the metric formulas match what the report will
   compute. The tool ran `make check` and `eval/parse_trace.py` with nuXmv 2.2.0 and reported the
   unguarded model violating all three properties and the guarded model satisfying all three.
+
+## 2026-09-27: Proposal report draft
+
+- **Tool and model:** Claude Code, Claude Opus 5.5.
+- **Who ran it:** Connor Brugger.
+- **What it produced:** `docs/proposal/proposal.tex` and `proposal.pdf`: the full draft of every
+  required section. It also installed AgentDojo 0.1.35 and cloned the MCP reference servers to get
+  the tool and task counts cited as evidence of access.
+- **Prompt summary:** The assignment's list of required sections, plus the course's lightning-talk
+  slides for format and grading context.
+- **Human review:** Pending. Team names, group letter, role assignments, success thresholds, and
+  the scenario count need team sign-off before submission.

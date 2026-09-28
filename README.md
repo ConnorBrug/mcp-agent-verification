@@ -10,21 +10,22 @@ and we measure how faithful those models are against hand-written references.
 
 ## Research questions
 
-1. **Translation faithfulness.** How faithful are LLM-generated SMV models of a tool-using agent,
-   measured against hand-written reference models? Metrics: parse rate, verdict agreement, trace
-   admissibility (`docs/metrics.md`).
-2. **Violations found.** Which safety violations (prompt-injection exfiltration, unconfirmed
-   destructive actions, privilege escalation) does model checking find in these agent models?
-3. **Trace reproducibility.** Which counterexample traces from the model checker reproduce when
-   replayed against a real sandboxed agent?
+1. Translation accuracy. How accurately can an LLM translate real MCP tool schemas into a
+   formal transition-system model? Measured against hand-written reference models by parse rate,
+   verdict agreement, and trace admissibility (`docs/metrics.md`).
+2. Violations found. What security violations can we discover by model checking the
+   LLM-generated models? A violation is confirmed only if the reference model also admits the
+   counterexample.
+3. Trace reproducibility. How many of the attack traces produced by the model checker
+   reproduce against a sandboxed agent that uses the corresponding real tools?
 
 ## Team
 
-| Name | Role | Contact |
-|---|---|---|
-| Team member 1 | TBD | TBD |
-| Team member 2 | TBD | TBD |
-| Team member 3 | TBD | TBD |
+| Name | Role |
+|---|---|
+| Teo Kitanovski | TBD |
+| Connor Brugger | TBD |
+| Xiaodi Shao | TBD |
 
 ## Repository layout
 
@@ -49,7 +50,7 @@ Windows, use WSL (Ubuntu) and run everything inside it.
 
 ### nuXmv
 
-nuXmv is free for academic and non-commercial use but is **not redistributable**. Do not commit
+nuXmv is free for academic and non-commercial use but is not redistributable. Do not commit
 the binary or the archive to this repo. Each person downloads it.
 
 1. Go to the download page: <https://nuxmv.fbk.eu/download.html>. Read and accept the license.
@@ -169,5 +170,5 @@ Other targets: `make check-unguarded`, `make check-guarded`, `make clean`.
 ## Docs
 
 - `docs/interface.md`: canonical variable interface every model must use.
-- `docs/metrics.md`: formulas for parse rate, verdict agreement, and trace admissibility.
+- `docs/metrics.md`: formulas for parse rate, verdict agreement, trace admissibility, and confirmed-violation rate.
 - `docs/AI_USE.md`: log of AI tool use, for the report's disclosure.

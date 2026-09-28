@@ -1,7 +1,7 @@
 # Metrics
 
-Definitions for the three metrics reported for RQ1 (translation faithfulness). Math uses GitHub
-LaTeX syntax.
+Definitions for the metrics reported for RQ1 (translation accuracy) and RQ2 (violations found).
+Math uses GitHub LaTeX syntax.
 
 ## Notation
 
@@ -98,3 +98,17 @@ $$
 
 $\mathrm{adm}(g, \pi) = 1$ exactly when this spec is **false**, i.e. nuXmv finds a path realizing
 $\pi$.
+
+## 4. Confirmed-violation rate (RQ2)
+
+The same check in the other direction. Let $D_g$ be the counterexamples nuXmv produces on generated
+model $g$. A violation found in $g$ is confirmed if the reference model admits its trace; otherwise
+it is an artifact of mistranslation.
+
+$$
+\mathrm{CV} = \frac{\sum_{g \in G} \sum_{\pi \in D_g} \mathrm{adm}(\mathrm{ref}(g), \pi)}{\sum_{g \in G} \lvert D_g \rvert}
+vert}
+$$
+
+with the sum over parsing models only. Guarded references admit no violating trace, so every
+violation found in a model generated for a guarded scenario counts as unconfirmed.

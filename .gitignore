@@ -37,3 +37,9 @@ NuSMV-*/
 .idea/
 .DS_Store
 Thumbs.db
+
+# LaTeX build files
+docs/proposal/*.aux
+docs/proposal/*.log
+docs/proposal/*.out
+docs/proposal/*.synctex.gz

@@ -1,0 +1,197 @@
+\documentclass[10pt]{article}
+\usepackage[letterpaper,margin=0.75in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage[hidelinks]{hyperref}
+\usepackage{titlesec}
+
+\setlist{nosep,leftmargin=1.4em}
+\titleformat{\section}{\normalsize\bfseries}{\thesection.}{0.5em}{}
+\titlespacing*{\section}{0pt}{0.9ex}{0.4ex}
+\setlength{\parindent}{0pt}
+\setlength{\parskip}{0.5ex}
+
+% ---- Fill these in before submitting ----------------------------------------
+\newcommand{\groupletter}{\textcolor{red}{[B or D]}}
+\newcommand{\memberA}{Teo Kitanovski}
+\newcommand{\memberB}{Connor Brugger}
+\newcommand{\memberC}{Xiaodi Shao}
+% -----------------------------------------------------------------------------
+
+\newcommand{\act}[1]{\texttt{#1}}
+\newcommand{\LTLG}{\mathbf{G}}
+\newcommand{\LTLX}{\mathbf{X}}
+\newcommand{\LTLY}{\mathbf{Y}}
+
+\begin{document}
+
+\begin{center}
+{\large\bfseries Model Checking MCP-Style Tool-Using Agents:\\
+Accuracy of LLM-Written Models and Reproducibility of Counterexamples}\\[0.6ex]
+CS 3892, Fall 2026 \quad Project proposal \quad Group \groupletter\\
+\memberA, \memberB, \memberC\\
+\url{https://github.com/ConnorBrug/mcp-agent-verification}
+\end{center}
+
+Acronyms used below: MCP is the Model Context Protocol, the standard way an LLM (large language
+model) agent connects to its tools. LTL is linear temporal logic. SMV is the input language of the
+NuSMV and nuXmv model checkers. BDD is binary decision diagram and BMC is bounded model checking.
+FM4AI means formal methods for AI, and AI4FM means AI for formal methods.
+
+\section{Topic}
+Menu topic 8, formal models of agentic AI. We model an LLM agent that calls tools through MCP as a
+finite transition system in SMV, write safety properties in LTL, and check them with nuXmv. The
+project asks three questions.
+\begin{itemize}
+\item \textbf{RQ1.} How accurately can an LLM translate real MCP tool schemas into a formal
+  transition-system model? We compare each generated model with a hand-written reference on whether
+  it parses, whether it gets the same verdict for each property, and whether it admits the
+  reference's counterexamples.
+\item \textbf{RQ2.} What security violations can we discover by model checking the LLM-generated
+  models? We count a violation as confirmed only when the reference model also admits its
+  counterexample. Anything else is a translation error.
+\item \textbf{RQ3.} How many of the attack traces from the model checker reproduce against a
+  sandboxed agent that uses the corresponding real tools?
+\end{itemize}
+The work covers 5 scenarios. Each has a hand-written reference model in two variants, unguarded and
+guarded. The LLM writes 10 models per scenario, 50 in total. Five come from the tool schemas alone
+and are compared with the unguarded reference. The other five also get an English description of the
+policy and are compared with the guarded reference. Every model is checked against the same 3
+properties.
+
+\section{The FM half}
+The method is LTL model checking of finite-state systems, and one of the properties uses a past-time
+operator. The tool is nuXmv 2.2.0 with its BDD engine in batch mode. NuSMV 2.7 is our fallback, and
+nuXmv's BMC engine is available if a model gets too large for BDDs.
+
+All models, reference and generated, declare the same interface, so one property file checks every
+model. The interface is \act{action} $\in$ \{\act{idle}, \act{read\_trusted}, \act{read\_untrusted},
+\act{send\_external}, \act{confirm}, \act{delete}, \act{request\_grant}\} and four booleans:
+\act{tainted}, \act{confirmed}, \act{privileged}, and \act{grant}. The LLM's next tool call is a
+nondeterministic input. A second input, controlled by the attacker, decides whether an untrusted read
+contains a prompt injection. If it does, \act{tainted} becomes true and stays true. Each scenario maps
+its tools onto the abstract actions. In AgentDojo, for example, \act{send\_money} and
+\act{send\_email} map to \act{send\_external}, \act{delete\_file} maps to \act{delete}, and
+\act{get\_webpage} and \act{read\_inbox} map to \act{read\_untrusted}. The guarded variant puts a
+policy layer in front of execution. It drops an external send while the agent is tainted, drops a
+delete unless the previous step was a confirm, and grants privilege only when \act{grant} is true.
+
+The properties, where $\LTLG$ means always, $\LTLX$ the next step, and $\LTLY$ the previous step:\\[0.3ex]
+\begin{tabular}{@{}ll@{}}
+P1, no exfiltration after injection & $\LTLG(\act{tainted} \rightarrow \LTLG(\act{action} \neq \act{send\_external}))$\\
+P2, delete needs confirmation & $\LTLG(\act{action} = \act{delete} \rightarrow \LTLY(\act{action} = \act{confirm}))$\\
+P3, no privilege without a grant & $\LTLG((\neg\act{privileged} \wedge \LTLX\,\act{privileged}) \rightarrow \act{grant})$
+\end{tabular}
+
+On unguarded models we expect nuXmv to return \emph{false} for all three properties, each with a
+lasso-shaped counterexample. On guarded models we expect \emph{true}. A generated model should get
+the same verdict as its reference, and a mismatch counts against it in RQ1.
+
+We have already run nuXmv on toy versions of both reference variants, and \texttt{make check} gives
+the expected verdicts:
+\noindent\begin{minipage}{\linewidth}\small
+\begin{verbatim}
+== agent_unguarded
+  COUNTEREXAMPLE  G (action = delete ->  Y action = confirm)
+  COUNTEREXAMPLE  G (tainted ->  G action != send_external)
+  COUNTEREXAMPLE  G ((!privileged &  X privileged) -> grant)
+== agent_guarded
+  HOLDS           G (tainted ->  G action != send_external)
+  HOLDS           G (action = delete ->  Y action = confirm)
+  HOLDS           G ((!privileged &  X privileged) -> grant)
+\end{verbatim}
+\end{minipage}
+In the P1 counterexample, the agent reads untrusted input that carries an injection and sends data
+out on the next step. Our script \texttt{eval/parse\_trace.py} converts traces like this one to JSON
+for replay.
+
+\section{The AI half}
+The AI is mainly the subject (FM4AI), since we model and check the behavior of an LLM tool-using
+agent, but we also use an LLM as an instrument (AI4FM) to write the SMV models, and RQ1 evaluates
+how well it does.
+
+\section{Data or benchmark}
+\begin{itemize}
+\item AgentDojo (Debenedetti et al., NeurIPS 2024 Datasets and Benchmarks track, MIT license,
+  \url{https://github.com/ethz-spylab/agentdojo}). It provides stateful simulated tool environments
+  along with prompt-injection attacks. We take the tool schemas for 4 scenarios from it and use it as
+  the sandbox for RQ3. Its tool definitions export directly to MCP's tool format (name, description,
+  JSON Schema \texttt{inputSchema}). We checked access on 27 Sep 2026: \texttt{pip install
+  agentdojo} installed v0.1.35, and \texttt{get\_suites("v1.2")} loaded the workspace (24 tools),
+  travel (28), banking (11), and slack (11) suites, for 74 tools, 97 user tasks, and 35 injection
+  tasks in total.
+\item The MCP reference servers (\url{https://github.com/modelcontextprotocol/servers}). Scenario 5
+  is an agent connected to the fetch (1 tool), filesystem (14), and git (12) servers. In this
+  scenario \act{fetch} is an untrusted read, and it can also leak data through the URL it requests.
+  We checked access by cloning the repository at commit \texttt{f46d957} on 27 Sep 2026. Each
+  server's tool definitions are in its source.
+\item We write the 5 reference models and the property file ourselves. nuXmv produces the
+  counterexamples from them.
+\end{itemize}
+
+\section{Success criterion}
+We set these thresholds before generating any models. The metric formulas are in
+\texttt{docs/metrics.md} in the repository.
+\begin{itemize}
+\item \textbf{RQ1 (primary).} Across the 50 generated models, strict verdict agreement with the
+  reference (VA) is at least 0.8 and the false-safe rate (FS) is at most 0.1. A false-safe result is
+  a generated model reporting \emph{true} for a property its reference violates. We also report
+  parse rate and trace admissibility.
+\item \textbf{RQ2.} Checking the generated models finds a counterexample to each of P1, P2, and P3
+  in at least 3 of the 5 scenarios, and the reference model admits at least 70\% of all the
+  counterexamples found.
+\item \textbf{RQ3.} In agent-driven replay, counterexample traces cause a violation more often than
+  random action sequences of the same length (one-sided test, $p < 0.05$).
+\end{itemize}
+If RQ1 comes out negative, with VA below 0.8 or FS above 0.1, LLM-written models need human review
+before anyone trusts their safety verdicts. We would then report which properties and which tool
+mappings the LLM got wrong. If fewer than 70\% of the RQ2 violations are confirmed, checking
+LLM-written models mostly finds translation errors and not attacks. If counterexample traces
+reproduce no more often than random ones, our abstraction is too coarse to predict how real agents
+fail, and we report how many traces were spurious.
+
+\section{Responsibility breakdown}
+\begin{tabularx}{\linewidth}{@{}lX@{}}
+\toprule
+\memberA & Reference models and properties for all 5 scenarios, nuXmv runs (RQ2), and the metric scripts in \texttt{eval/}. \\
+\memberB & The generation pipeline in \texttt{pipeline/}: prompts, the 50 generation runs, the parse-and-repair loop, and run logs (RQ1). \\
+\memberC & The replay harness in \texttt{sandbox/} on AgentDojo, the maps from abstract actions to concrete tool calls, and both kinds of replay (RQ3). \\
+All & Interface spec, report, talk, and the AI-use log in \texttt{docs/AI\_USE.md}. \\
+\bottomrule
+\end{tabularx}
+
+We plan to have reference models for all 5 scenarios and a working generation pipeline by 15 Oct.
+By the 12 Nov milestone we will have checked all 50 generated models, computed the RQ1 and RQ2
+metrics, and have scripted replay running. The milestone demo is \texttt{make check} followed by a
+replay of one counterexample. Agent-driven replay and the RQ3 numbers come last, for the final report.
+
+\section{Repository URL}
+\url{https://github.com/ConnorBrug/mcp-agent-verification}. The repository has a README with the
+research questions, install steps, and a run guide. It also holds the interface spec, the metric
+definitions, the two toy reference models, the property file, a Makefile, and the trace parser.
+Running \texttt{make check} reproduces the toy result in Section~2.
+
+\section{Risks and fallback}
+The most likely failure is in RQ3, where abstract traces have to become concrete tool calls. A
+counterexample step such as \act{send\_external} does not say which tool to call or with what
+arguments. An LLM agent may also ignore an injected instruction for reasons unrelated to our model,
+so reproduction rates could come out near zero without telling us anything about the abstraction. If
+that happens, we split RQ3 in two. In scripted replay we issue the concrete calls ourselves from a
+per-scenario action map, which tests whether the environment allows the violation at all. In
+agent-driven replay we plant only the injection and watch what the agent does. If agent-driven replay
+turns out too expensive or too noisy, we run scripted replay on every trace and agent-driven replay
+on a fixed subset.
+
+The second risk is that generated models fail to parse or rename interface variables, which would
+leave RQ1 with nothing to compare. The fallback is to give the LLM the interface declarations as a
+fixed template and let it repair its model up to 3 times from nuXmv's error messages. We would report
+parse rate before and after repair.
+
+API cost could also limit how many models we generate. We cap generation at 10 runs per scenario and
+commit every output, so no run has to be repeated.
+
+\end{document}
