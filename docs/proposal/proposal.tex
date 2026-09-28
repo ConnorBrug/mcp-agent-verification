@@ -131,8 +131,10 @@ how well it does.
   server's tool definitions are in its source.
 \item We write the 5 reference models and the property file ourselves. nuXmv produces the
   counterexamples from them.
-\item Neither dataset needs credentialing. Model generation and agent-driven replay call a
-  commercial LLM API, with the cost cap described in Section~8.
+\item Neither dataset needs credentialing. Model generation and agent-driven replay use
+  Vanderbilt's Amplify API, which gives university accounts access to GPT, Claude, and Mistral
+  models. Amplify returns plain text without native tool calling, so agent-driven replay uses
+  AgentDojo's prompt-based tool-calling agent (\texttt{PromptingLLM}).
 \end{itemize}
 
 \section{Success criterion}
@@ -195,7 +197,7 @@ leave RQ1 with nothing to compare. The fallback is to give the LLM the interface
 fixed template and let it repair its model up to 3 times from nuXmv's error messages. We would report
 parse rate before and after repair.
 
-API cost could also limit how many models we generate. We cap generation at 10 runs per scenario and
-commit every output, so no run has to be repeated.
+Amplify usage limits could also cap how many models we generate. We fix generation at 10 runs per
+scenario and commit every output, so no run has to be repeated.
 
 \end{document}

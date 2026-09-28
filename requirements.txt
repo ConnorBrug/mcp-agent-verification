@@ -1,5 +1,6 @@
 # eval/parse_trace.py uses only the standard library (Python 3.9+).
-# The packages below are for the schema-to-SMV pipeline.
-anthropic      # LLM client for generating SMV models from tool schemas
+# The packages below are for the schema-to-SMV pipeline and the sandbox.
+requests       # calls Vanderbilt's Amplify API (https://prod-api.vanderbilt.ai) for model generation
+agentdojo      # tool environments and prompt-injection tasks; sandbox for replay
 jsonschema     # validate MCP tool schemas before translation
 pytest         # tests for pipeline and eval code
