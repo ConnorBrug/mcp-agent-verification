@@ -12,7 +12,9 @@ PROPS  := properties/safety.ltl
 REF    := models/reference
 TRACES := traces
 
-.PHONY: check check-unguarded check-guarded traces-json clean
+VENV   := .venv/bin/python
+
+.PHONY: check check-unguarded check-guarded traces-json clean test generate
 
 check: check-unguarded check-guarded
 
@@ -29,6 +31,15 @@ traces-json: check-unguarded
 
 clean:
 	rm -f $(TRACES)/*.out $(TRACES)/*.smv
+
+# Pipeline tests (needs the .venv from the README; nuXmv tests skip if nuXmv is missing).
+test:
+	$(VENV) -m pytest -q tests
+
+# LLM model generation, e.g. make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<id>
+RUNS ?= 1
+generate:
+	$(VENV) -m pipeline.generate --scenario $(SCENARIO) --variant $(VARIANT) --runs $(RUNS) --model $(MODEL)
 
 # $(1) = model name without extension, looked up in $(REF)
 define run_check

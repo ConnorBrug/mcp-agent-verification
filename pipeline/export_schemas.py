@@ -15,6 +15,8 @@ import asyncio
 import datetime
 import importlib.metadata
 import json
+import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -65,19 +67,31 @@ async def _list_mcp_tools(command, args):
         async with ClientSession(read, write) as session:
             init = await session.initialize()
             result = await session.list_tools()
-            server = f"{init.serverInfo.name} {init.serverInfo.version}"
+            # The mcp SDK renamed camelCase fields to snake_case in 2.x; accept either.
+            info = getattr(init, "server_info", None) or getattr(init, "serverInfo")
+            server = f"{info.name} {info.version}"
             tools = [
-                {"name": t.name, "description": t.description or "", "inputSchema": t.inputSchema}
+                {"name": t.name, "description": t.description or "",
+                 "inputSchema": getattr(t, "input_schema", None) or getattr(t, "inputSchema")}
                 for t in result.tools
             ]
             return server, tools
 
 
+def _path_for(command, path):
+    """Under WSL, a Windows binary (e.g. /mnt/c/.../npx) needs a Windows path."""
+    exe = shutil.which(command) or ""
+    if exe.startswith("/mnt/"):
+        return subprocess.check_output(["wslpath", "-w", path], text=True).strip()
+    return path
+
+
 def export_mcp():
     servers, tools = [], []
-    with tempfile.TemporaryDirectory() as tmpdir:
+    # Temp dir inside the repo so a Windows npx under WSL can also see it.
+    with tempfile.TemporaryDirectory(dir=Path(__file__).resolve().parent.parent) as tmpdir:
         for label, command, args in MCP_SERVERS:
-            args = [a.replace("{tmpdir}", tmpdir) for a in args]
+            args = [a.replace("{tmpdir}", _path_for(command, tmpdir)) for a in args]
             server, server_tools = asyncio.run(_list_mcp_tools(command, args))
             servers.append(server)
             for t in server_tools:

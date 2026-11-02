@@ -107,10 +107,25 @@ The NuSMV fallback has not been tested on this repo yet.
 
 ```sh
 sudo apt install make python3      # Debian/Ubuntu/WSL
-pip install -r requirements.txt    # only needed for pipeline/ work, not for the run guide
 ```
 
-`eval/parse_trace.py` uses only the Python standard library.
+`eval/parse_trace.py` uses only the Python standard library, so the run guide below needs nothing
+else.
+
+### Pipeline environment
+
+The LLM pipeline needs Python 3.12 (AgentDojo does not support newer versions yet). With
+[uv](https://docs.astral.sh/uv/):
+
+```sh
+uv venv -p 3.12 .venv
+VIRTUAL_ENV=.venv uv pip install -r requirements.txt
+make test
+```
+
+Model generation uses an open-weight model served locally by Ollama (or any OpenAI-compatible
+server). Vanderbilt's Amplify API is supported as an alternative; its key goes in `.env` as
+`AMPLIFY_API_KEY=...`. `.env` is gitignored; never commit a key. See `pipeline/README.md` to run it.
 
 ## Run guide: reproduce the headline result
 
