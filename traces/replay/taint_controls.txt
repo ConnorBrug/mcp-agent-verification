@@ -1,0 +1,3 @@
+inject=False: canary surfaced by []
+inject=True: canary surfaced by ['get_received_emails', 'get_unread_emails', 'search_emails', 'list_files']
+agentdojo 0.1.35

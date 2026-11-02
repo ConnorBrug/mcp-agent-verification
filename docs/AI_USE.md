@@ -48,3 +48,10 @@ Entry format:
   slides for format and grading context.
 - **Human review:** Pending. Team names, group letter, role assignments, success thresholds, and
   the scenario count need team sign-off before submission.
+
+## 2026-11-02: Sandbox replay
+- **Tool and model:** Claude Code, Claude Sonnet 5.5.
+- **Who ran it:** Xiaodi Shao.
+- **What it produced:** 'traces/agent_unguarded.json'; 'traces/replay/'; assisted in 'sandbox/replay.py'
+- **Prompt summary:** Claude walked me through the process of running the counterexample and summarized the results into a table (in the report). 
+- **Human review:** Xiaodi Shao, the user, ran the code and reviewed both the code and the results. 

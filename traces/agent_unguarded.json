@@ -1,0 +1,118 @@
+[
+  {
+    "spec": "G (action = delete -> Y action = confirm)",
+    "loop_starts": [
+      2
+    ],
+    "states": [
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "delete",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      }
+    ]
+  },
+  {
+    "spec": "G (tainted -> G action != send_external)",
+    "loop_starts": [
+      2,
+      3
+    ],
+    "states": [
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "read_untrusted",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": true,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": true,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": true,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      }
+    ]
+  },
+  {
+    "spec": "G ((!privileged & X privileged) -> grant)",
+    "loop_starts": [
+      2
+    ],
+    "states": [
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "request_grant",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": false,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": true,
+        "grant": false
+      },
+      {
+        "action": "send_external",
+        "tainted": false,
+        "confirmed": false,
+        "privileged": true,
+        "grant": false
+      }
+    ]
+  }
+]
