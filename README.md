@@ -4,9 +4,10 @@ Formal models of MCP-style tool-using AI agents. CS 3892, Vanderbilt University,
 Topic 8: formal models of agentic AI.
 
 We model a tool-using agent as a transition system in SMV, state safety properties in LTL, and use
-the nuXmv model checker to find violations as counterexample traces. We replay those traces against
-a sandboxed agent to see which violations reproduce. An LLM generates SMV models from tool schemas,
-and we measure how faithful those models are against hand-written references.
+the nuXmv model checker to find violations as counterexample traces. An open-weight LLM, run
+locally, writes SMV models from real tool schemas, and we measure how accurate those models are
+against hand-written references. We replay counterexample traces in the AgentDojo sandbox to see
+which violations reproduce.
 
 ## Research questions
 
@@ -23,21 +24,22 @@ and we measure how faithful those models are against hand-written references.
 
 | Name | Role |
 |---|---|
-| Teo Kitanovski | TBD |
-| Connor Brugger | TBD |
-| Xiaodi Shao | TBD |
+| Teo Kitanovski | Hand-written reference models, nuXmv runs, metric scripts in `eval/` (RQ2) |
+| Connor Brugger | LLM generation pipeline in `pipeline/` (RQ1) |
+| Xiaodi Shao | Sandbox replay in `sandbox/` (RQ3) |
 
 ## Repository layout
 
 | Path | Contents |
 |---|---|
 | `models/reference/` | Hand-written SMV models |
-| `models/generated/` | LLM-produced SMV models |
-| `properties/` | LTL property files (`safety.ltl`) |
-| `traces/` | nuXmv output and parsed counterexamples |
-| `pipeline/` | Schema-to-SMV translation code |
-| `sandbox/` | Containerized agent and replay harness |
-| `eval/` | Verdict comparison and metrics scripts |
+| `models/generated/` | LLM-written SMV models and their run logs |
+| `properties/` | LTL property file (`safety.ltl`) |
+| `pipeline/` | Tool schema export, prompts, LLM clients, nuXmv check and repair loop |
+| `sandbox/` | Replay of counterexamples as real tool calls in AgentDojo |
+| `eval/` | Counterexample parser (`parse_trace.py`); metric scripts to come |
+| `traces/` | nuXmv counterexamples as JSON, and replay results in `traces/replay/` |
+| `tests/` | Pipeline tests |
 | `docs/` | Interface spec, metric definitions, AI-use log |
 
 Every model uses the variable interface in `docs/interface.md`, so one property file checks all of
@@ -45,13 +47,23 @@ them.
 
 ## Install
 
-You need nuXmv, GNU make, and Python 3.9 or newer. The Makefile runs on Linux and macOS. On
-Windows, use WSL (Ubuntu) and run everything inside it.
+You need nuXmv, GNU make, and Python. The toy run guide below needs only the Python standard
+library. The pipeline and the sandbox need a Python 3.12 environment (see below).
+
+Everything runs on Linux, macOS, or WSL. On Windows, run commands inside WSL (Ubuntu). From a
+Windows terminal, use a login shell so `~/.local/bin` is on the PATH:
+
+```sh
+wsl bash -lc "make check"
+```
+
+Plain `wsl make check` fails with `make: command not found` when make and nuXmv are installed in
+`~/.local/bin`.
 
 ### nuXmv
 
-nuXmv is free for academic and non-commercial use but is not redistributable. Do not commit
-the binary or the archive to this repo. Each person downloads it.
+nuXmv is free for academic and non-commercial use but is not redistributable. Do not commit the
+binary or the archive to this repo. Each person downloads it.
 
 1. Go to the download page: <https://nuxmv.fbk.eu/download.html>. Read and accept the license.
 2. Download the archive for your OS (`nuXmv-<version>-linux64.tar.xz` or `-macos64.tar.xz`) and
@@ -109,12 +121,9 @@ The NuSMV fallback has not been tested on this repo yet.
 sudo apt install make python3      # Debian/Ubuntu/WSL
 ```
 
-`eval/parse_trace.py` uses only the Python standard library, so the run guide below needs nothing
-else.
+### Python 3.12 environment (pipeline and sandbox)
 
-### Pipeline environment
-
-The LLM pipeline needs Python 3.12 (AgentDojo does not support newer versions yet). With
+AgentDojo does not support Python versions newer than 3.12 yet. With
 [uv](https://docs.astral.sh/uv/):
 
 ```sh
@@ -123,67 +132,103 @@ VIRTUAL_ENV=.venv uv pip install -r requirements.txt
 make test
 ```
 
-Model generation uses an open-weight model served locally by Ollama (or any OpenAI-compatible
-server). Vanderbilt's Amplify API is supported as an alternative; its key goes in `.env` as
-`AMPLIFY_API_KEY=...`. `.env` is gitignored; never commit a key. See `pipeline/README.md` to run it.
+Model generation uses an open-weight model served by Ollama (or any OpenAI-compatible server).
+Vanderbilt's Amplify API is supported as an alternative; its key goes in `.env` as
+`AMPLIFY_API_KEY=...`. `.env` is gitignored; never commit a key. See `pipeline/README.md`.
 
-## Run guide: reproduce the headline result
+Exporting the MCP scenario's tool schemas (`python -m pipeline.export_schemas mcp`) also needs
+Node.js, because the filesystem server is written in TypeScript. The exported schemas are already
+committed in `pipeline/schemas/`, so this is only needed to re-export.
 
-Headline result: the unguarded reference agent violates all three safety properties, and adding
+## Run guide
+
+### 1. Model-check the toy reference models
+
+Toy headline result: the unguarded reference agent violates all three safety properties, and adding
 the policy layer (guarded agent) makes all three hold.
 
-1. Clone and enter the repo:
+```sh
+git clone https://github.com/ConnorBrug/mcp-agent-verification.git
+cd mcp-agent-verification
+make check
+```
 
-   ```sh
-   git clone <repo-url> mcp-agent-verification
-   cd mcp-agent-verification
-   ```
+Expected output:
 
-2. Check both reference models against the property file:
+```
+== agent_unguarded
+  COUNTEREXAMPLE  G (action = delete ->  Y action = confirm)
+  COUNTEREXAMPLE  G (tainted ->  G action != send_external)
+  COUNTEREXAMPLE  G ((!privileged &  X privileged) -> grant)
+== agent_guarded
+  HOLDS           G (tainted ->  G action != send_external)
+  HOLDS           G (action = delete ->  Y action = confirm)
+  HOLDS           G ((!privileged &  X privileged) -> grant)
+```
 
-   ```sh
-   make check
-   ```
+nuXmv may list properties in a different order. Full logs are in `traces/agent_unguarded.out` and
+`traces/agent_guarded.out`.
 
-   Expected output:
+### 2. Extract counterexamples as JSON
 
-   ```
-   == agent_unguarded
-     COUNTEREXAMPLE  G (action = delete ->  Y action = confirm)
-     COUNTEREXAMPLE  G (tainted ->  G action != send_external)
-     COUNTEREXAMPLE  G ((!privileged &  X privileged) -> grant)
-   == agent_guarded
-     HOLDS           G (tainted ->  G action != send_external)
-     HOLDS           G (action = delete ->  Y action = confirm)
-     HOLDS           G ((!privileged &  X privileged) -> grant)
-   ```
+```sh
+make traces-json
+```
 
-   nuXmv may list properties in a different order. Full logs are in `traces/agent_unguarded.out`
-   and `traces/agent_guarded.out`. The concatenated inputs nuXmv ran are
-   `traces/agent_unguarded.smv` and `traces/agent_guarded.smv`.
+This writes `traces/agent_unguarded.json`: one object per violated property with the formula, the
+loop-start indices, and the per-step values of `action`, `tainted`, `confirmed`, `privileged`,
+`grant`. Steps are 0-indexed. In the committed run, the taint counterexample reads untrusted
+content with an injection at step 1, is tainted at step 2, and sends externally at step 2. Exact
+traces can differ between nuXmv versions.
 
-3. Extract the unguarded counterexamples as JSON (the sandbox replay input format):
+### 3. Replay the counterexamples in AgentDojo
 
-   ```sh
-   make traces-json
-   ```
+```sh
+.venv/bin/python -m sandbox.replay traces/agent_unguarded.json --all > traces/replay/all_agentdojo.json
+```
 
-   This writes `traces/agent_unguarded.json`: one object per violated property with the formula,
-   the loop-start indices, and the per-step values of `action`, `tainted`, `confirmed`,
-   `privileged`, `grant`. Steps are 0-indexed. In our run, the taint counterexample reads
-   untrusted content with an injection at step 1, is tainted at step 2, and sends externally at
-   step 2. Exact traces can differ between nuXmv versions.
+Each abstract action becomes a real tool call in AgentDojo's workspace suite (for example,
+`send_external` becomes `send_email` to an outside address). A violation counts as reproduced only
+if the environment's taint matches the trace at every step and the violating call changes the
+environment. Expected status lines:
 
-   To parse any nuXmv log directly:
+```
+reproduced      G (action = delete -> Y action = confirm)
+reproduced      G (tainted -> G action != send_external)
+not_replayable  G ((!privileged & X privileged) -> grant)
+```
 
-   ```sh
-   python3 eval/parse_trace.py traces/agent_unguarded.out
-   ```
+The privilege trace is not replayable because the workspace suite has no tool that changes the
+agent's privileges.
 
-Other targets: `make check-unguarded`, `make check-guarded`, `make clean`.
+Limit: this is tool-level replay. It shows the environment allows the attack sequence, not that an
+LLM agent would choose it. Agent-driven replay is planned. See `sandbox/README.md`.
+
+### 4. Generate LLM-written models
+
+See `pipeline/README.md`. In short, with a model served by Ollama:
+
+```sh
+make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<model id>
+```
+
+### Make targets
+
+| Target | What it does |
+|---|---|
+| `make check` | Model-check both toy reference models |
+| `make check-unguarded`, `make check-guarded` | One of them |
+| `make traces-json` | Parse the unguarded counterexamples to JSON |
+| `make test` | Pipeline tests (needs the `.venv`) |
+| `make generate` | LLM model generation (`SCENARIO`, `VARIANT`, `RUNS`, `MODEL`) |
+| `make clean` | Delete nuXmv logs and temp files in `traces/` |
 
 ## Docs
 
-- `docs/interface.md`: canonical variable interface every model must use.
-- `docs/metrics.md`: formulas for parse rate, verdict agreement, trace admissibility, and confirmed-violation rate.
+- `docs/interface.md`: variable interface every model must use.
+- `docs/metrics.md`: formulas for parse rate, verdict agreement, trace admissibility, and
+  confirmed-violation rate.
 - `docs/AI_USE.md`: log of AI tool use, for the report's disclosure.
+- `pipeline/README.md`: LLM backend setup and how to run generation.
+- `models/generated/README.md`: layout of generated runs and their logs.
+- `sandbox/README.md`: replay details and limits.
