@@ -1,0 +1,48 @@
+MODULE main
+
+VAR
+  action : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted : boolean;
+  confirmed : boolean;
+  privileged : boolean;
+  grant : boolean;
+
+  chosen_tool : {
+    no_tool, get_balance, get_iban, get_most_recent_transactions,
+    get_scheduled_transactions, get_user_info, read_file,
+    schedule_transaction, send_money, update_password,
+    update_scheduled_transaction, update_user_info
+  };
+
+  attacker_injects : boolean;
+
+DEFINE
+  proposed_action := case
+    chosen_tool = get_balance : read_trusted;
+    chosen_tool = get_iban : read_trusted;
+    chosen_tool = get_most_recent_transactions : read_untrusted;
+    chosen_tool = get_scheduled_transactions : read_untrusted;
+    chosen_tool = get_user_info : read_trusted;
+    chosen_tool = read_file : read_untrusted;
+    chosen_tool = schedule_transaction : send_external;
+    chosen_tool = send_money : send_external;
+    chosen_tool = update_password : idle;
+    chosen_tool = update_scheduled_transaction : send_external;
+    chosen_tool = update_user_info : idle;
+    TRUE : idle;
+  esac;
+
+ASSIGN
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+
+  action :=
+    case
+      proposed_action = send_external & tainted : idle;
+      proposed_action = delete & !confirmed : idle; 
+      TRUE : proposed_action;
+    esac;
+  next(tainted) := tainted | (action = read_untrusted & attacker_injects);
+  next(confirmed) := action = confirm;
+  next(privileged) := privileged;

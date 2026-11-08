@@ -15,6 +15,7 @@ TRACES := traces
 VENV   := .venv/bin/python
 
 .PHONY: check check-unguarded check-guarded traces-json clean test generate
+.PHONY: check-banking check-banking-unguarded check-banking-guarded
 
 check: check-unguarded check-guarded
 
@@ -23,6 +24,15 @@ check-unguarded:
 
 check-guarded:
 	$(call run_check,agent_guarded)
+
+# Check the banking reference models separately from the toy models.
+check-banking: check-banking-unguarded check-banking-guarded
+
+check-banking-unguarded:
+	$(call run_check,banking_unguarded)
+
+check-banking-guarded:
+	$(call run_check,banking_guarded)
 
 # Parse the unguarded counterexamples into the JSON format the sandbox replay consumes.
 traces-json: check-unguarded
