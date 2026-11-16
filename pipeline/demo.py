@@ -15,16 +15,34 @@ generation time. It is also the automatic fallback when nuXmv is not installed.
 """
 import argparse
 import json
+import re
 import shutil
 import sys
 from collections import defaultdict
 from pathlib import Path
 
-from pipeline.check import check_model
+from pipeline.check import PROPERTIES, check_model
 
 REPO = Path(__file__).resolve().parent.parent
 REFERENCE = REPO / "models" / "reference"
 GENERATED = REPO / "models" / "generated"
+
+
+def _shape(formula):
+    """Formula with spaces and parentheses removed. nuXmv reprints formulas with its own
+    parenthesization (G (a != b) comes back as G a != b), so this is how we match them."""
+    return re.sub(r"[\s()]", "", formula)
+
+
+def property_order(path=PROPERTIES):
+    """Shapes of the LTLSPEC formulas in file order, so P1 is the first spec in safety.ltl."""
+    order = []
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        line = line.split("--", 1)[0].strip()
+        m = re.match(r"LTLSPEC\b(?:\s+NAME\s+\w+\s*:=)?\s*(.+)", line)
+        if m:
+            order.append(_shape(m.group(1)))
+    return order
 
 
 def _mark(holds):
@@ -88,12 +106,24 @@ def main(argv=None):
 
     # per (model, scenario, variant): counters for the summary
     stats = defaultdict(lambda: defaultdict(float))
-    formulas = []  # every property formula seen, in first-seen order, for the legend
+    # Number properties by their position in properties/safety.ltl, not by how nuXmv orders its
+    # output or how the formula strings sort. A formula not found there gets the next free number.
+    order = property_order()
+    formulas = {}  # number -> formula as nuXmv printed it, for the legend
+
+    def number(formula):
+        shape = _shape(formula)
+        if shape not in order:
+            order.append(shape)
+        n = order.index(shape) + 1
+        formulas.setdefault(n, formula)
+        return n
 
     def label(formula):
-        if formula not in formulas:
-            formulas.append(formula)
-        return f"P{formulas.index(formula) + 1}"
+        return f"P{number(formula)}"
+
+    def in_order(verdicts):
+        return sorted(verdicts, key=number)
 
     for scenario in scenarios:
         for variant_dir in sorted(p for p in (GENERATED / scenario).iterdir() if p.is_dir()):
@@ -103,7 +133,7 @@ def main(argv=None):
             if ref is None:
                 print(f"   reference: {ref_problem}")
             else:
-                print("   reference (hand-written):   " + "   ".join(f"{label(f)} {_mark(ref[f])}" for f in sorted(ref)))
+                print("   reference (hand-written):   " + "   ".join(f"{label(f)} {_mark(ref[f])}" for f in in_order(ref)))
             for run_dir in sorted(variant_dir.glob("run_*")):
                 log, verdicts, problem = _generated(run_dir, live)
                 if log is None:
@@ -119,7 +149,7 @@ def main(argv=None):
                     print(f"   {run_dir.name}  {model:20}  DOES NOT PARSE: {str(problem)[:70]}")
                     continue
                 s["parsed"] += 1
-                cells = "   ".join(f"{label(f)} {_mark(verdicts[f])}" for f in sorted(verdicts))
+                cells = "   ".join(f"{label(f)} {_mark(verdicts[f])}" for f in in_order(verdicts))
                 note = ""
                 if ref is not None:
                     shared = [f for f in ref if f in verdicts]
@@ -135,8 +165,8 @@ def main(argv=None):
                 print(f"   {run_dir.name}  {model:20}  {cells}{note}")
 
     print("\nProperties (properties/safety.ltl):")
-    for i, f in enumerate(formulas, 1):
-        print(f"   P{i}  {f}")
+    for n in sorted(formulas):
+        print(f"   P{n}  {formulas[n]}")
 
     print("\nSummary")
     print(f"   {'model':20} {'scenario/variant':20} {'parse 1st try':>13} {'parse final':>11} "

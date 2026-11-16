@@ -251,6 +251,20 @@ def test_demo_live_compares_with_reference_and_survives_a_missing_one(tmp_path, 
     assert "no reference model at reference/toy_unguarded.smv" in out
 
 
+def test_demo_numbers_properties_as_in_safety_ltl():
+    import pipeline.demo as demo
+
+    # Formulas as nuXmv prints them, in the order nuXmv prints them (not file order).
+    printed = [
+        "G (action = delete -> Y action = confirm)",
+        "G ((!privileged & X privileged) -> grant)",
+        "G (tainted -> G action != send_external)",
+    ]
+    order = demo.property_order()
+    assert len(order) == 3
+    assert [order.index(demo._shape(f)) + 1 for f in printed] == [2, 3, 1]
+
+
 def test_run_dirs_do_not_overwrite(tmp_path, monkeypatch):
     class Ok:
         ok = True
