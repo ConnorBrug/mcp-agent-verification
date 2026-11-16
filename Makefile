@@ -51,11 +51,16 @@ RUNS ?= 1
 generate:
 	$(VENV) -m pipeline.generate --scenario $(SCENARIO) --variant $(VARIANT) --runs $(RUNS) --model $(MODEL)
 
-# Demo: nuXmv live on the reference models and every LLM-written model, with a comparison table.
-# Needs only nuXmv and python3 (no .venv, no GPU, no LLM). Filter with DEMO_ARGS, e.g.
+# Demo: nuXmv live on the reference models and every LLM-written model, compared with the reference.
+# Needs only nuXmv and python3 (no .venv, no GPU, no LLM). `make demo` is the short layout for a
+# projector (plus one attack trace); `make demo-full` prints every formula and the metric table.
+# Filter with DEMO_ARGS, e.g.
 #   make demo DEMO_ARGS="--model qwen3.8:27b"
-.PHONY: demo
+.PHONY: demo demo-full
 demo:
+	@$(PYTHON) -m pipeline.demo --compact $(DEMO_ARGS)
+
+demo-full:
 	@$(PYTHON) -m pipeline.demo $(DEMO_ARGS)
 
 # $(1) = model name without extension, looked up in $(REF)

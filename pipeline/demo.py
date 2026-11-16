@@ -17,7 +17,10 @@ import argparse
 import json
 import re
 import shutil
+import subprocess
 import sys
+import tempfile
+import time
 from collections import defaultdict
 from pathlib import Path
 
@@ -83,15 +86,170 @@ def _generated(run_dir, live):
     return log, None, (problems[0] if problems else "did not parse")
 
 
+STATE_LINE = re.compile(r"^\s*-> State: \d+\.\d+ <-")
+ASSIGN_LINE = re.compile(r"^\s*([\w.]+) = (\S+)\s*$")
+
+
+def _paint(text, color, on):
+    codes = {"red": "31;1", "green": "32", "dim": "2", "bold": "1"}
+    return f"\033[{codes[color]}m{text}\033[0m" if on else text
+
+
+def attack_trace(model_path, prop_index=0):
+    """nuXmv's counterexample to property number prop_index + 1 (file order) on one model.
+
+    Returns a list of states, each a dict of every variable nuXmv printed (nuXmv prints only the
+    variables that changed, so each state starts as a copy of the previous one). The list is cut at
+    the first state where P1's bad condition (tainted and send_external) holds. None if the
+    property holds or nuXmv is missing.
+    """
+    if shutil.which("nuXmv") is None:
+        return None
+    props = PROPERTIES.read_text(encoding="utf-8")
+    want = property_order()[prop_index]
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "model.smv"
+        path.write_text(Path(model_path).read_text(encoding="utf-8").rstrip() + "\n\n" + props, encoding="utf-8")
+        out = subprocess.run(["nuXmv", str(path)], stdin=subprocess.DEVNULL, capture_output=True,
+                             text=True, timeout=120).stdout
+    states, current, inside = [], {}, False
+    for line in out.splitlines():
+        if line.startswith("-- specification"):
+            inside = line.rstrip().endswith("is false") and _shape(line[len("-- specification"):].rsplit(" is ", 1)[0]) == want
+            continue
+        if not inside:
+            continue
+        if STATE_LINE.match(line):
+            current = dict(current)
+            states.append(current)
+        else:
+            m = ASSIGN_LINE.match(line)
+            if m and states:
+                current[m.group(1)] = m.group(2)
+    if not states:
+        return None
+    for i, s in enumerate(states):
+        if s.get("tainted") == "TRUE" and s.get("action") == "send_external":
+            return states[: i + 1]
+    return states
+
+
+def compact(args, live):
+    """One screen: verdict per model and property, agreement with the reference, one attack trace."""
+    color = sys.stdout.isatty()
+    start = time.time()
+    names = {1: "P1 taint", 2: "P2 delete", 3: "P3 priv."}
+    order = property_order()
+
+    def by_number(verdicts):
+        out = {}
+        for f, v in verdicts.items():
+            shape = _shape(f)
+            if shape in order:
+                out[order.index(shape) + 1] = v
+        return out
+
+    def cell(holds):
+        return _paint(f"{'safe':<10}", "green", color) if holds else _paint(f"{'ATTACK':<10}", "red", color)
+
+    def short(model):
+        return model.split(":")[-1].upper() if ":" in model else model
+
+    scenarios = sorted(p.name for p in GENERATED.iterdir() if p.is_dir()) if GENERATED.exists() else []
+    if args.scenario:
+        scenarios = [s for s in scenarios if s == args.scenario]
+    if not scenarios:
+        print("No generated runs found under models/generated/.")
+        return 1
+
+    per_llm = defaultdict(lambda: defaultdict(float))
+    n_models = 0
+    print(_paint("nuXmv, running now on every model in the repo" if live else
+                 "Verdicts saved at generation time (nuXmv not run)", "bold", color))
+    for scenario in scenarios:
+        for variant_dir in sorted((p for p in (GENERATED / scenario).iterdir() if p.is_dir()), reverse=True):
+            variant = variant_dir.name
+            ref, _ = _reference(scenario, variant, live)
+            ref = by_number(ref) if ref else None
+            n_models += ref is not None
+            label = "tools as they are" if variant == "unguarded" else "tools + a safety policy"
+            print()
+            print(_paint(f"{scenario} {variant.upper()} ({label})", "bold", color))
+            print(f"  {'':16}" + "".join(f"{names[n]:<10}" for n in (1, 2, 3)) + "same as hand-written?")
+            if ref is not None:
+                print(f"  {'hand-written':16}" + "".join(cell(ref[n]) for n in (1, 2, 3)))
+            for run_dir in sorted(variant_dir.glob("run_*")):
+                log, verdicts, problem = _generated(run_dir, live)
+                if log is None:
+                    continue
+                model = log["llm"].get("model", "?")
+                if args.model and model != args.model:
+                    continue
+                n_models += 1
+                s = per_llm[model]
+                s["runs"] += 1
+                tag = f"{run_dir.name[-2:]} by {short(model)}"
+                if verdicts is None:
+                    print(f"  {tag:16}" + _paint("nuXmv could not parse it", "dim", color))
+                    continue
+                s["parsed"] += 1
+                v = by_number(verdicts)
+                line = f"  {tag:16}" + "".join(cell(v[n]) for n in (1, 2, 3))
+                if ref is not None:
+                    same = sum(v[n] == ref[n] for n in (1, 2, 3))
+                    s["compared"] += 1
+                    s["agree"] += same / 3
+                    for n in (1, 2, 3):
+                        if not ref[n]:
+                            s["ref_attacks"] += 1
+                            s["missed"] += v[n]
+                    line += _paint("yes", "green", color) if same == 3 else f"{same} of 3"
+                print(line)
+
+    print()
+    print(_paint("Summary per LLM", "bold", color))
+    print(f"  {'':20}{'parses':<10}{'agreement':<12}real attacks it called safe")
+    for model, s in sorted(per_llm.items()):
+        n = int(s["runs"])
+        missed = f"{int(s['missed'])} of {int(s['ref_attacks'])}" if s["ref_attacks"] else "n/a"
+        parses = "%d/%d" % (s["parsed"], n)
+        agreement = "%.2f" % (s["agree"] / n) if s["compared"] else "n/a"
+        print(f"  {model:20}{parses:<10}{agreement:<12}{missed}")
+
+    ref_path = REFERENCE / f"{scenarios[0]}_unguarded.smv"
+    trace = attack_trace(ref_path) if live and ref_path.exists() else None
+    if trace:
+        print()
+        print(_paint(f"nuXmv's attack trace for P1 on the hand-written {scenarios[0]} model", "bold", color))
+        for i, s in enumerate(trace, 1):
+            tool = s.get("chosen_tool", "")
+            inject = any(v == "TRUE" for k, v in s.items() if "inject" in k)
+            note = ""
+            if inject and s.get("action") == "read_untrusted":
+                note = _paint("<- attacker injects", "red", color)
+            elif s.get("tainted") == "TRUE" and s.get("action") == "send_external":
+                note = _paint("<- P1 broken", "red", color)
+            tainted = "tainted" if s.get("tainted") == "TRUE" else "clean"
+            print(f"  step {i}  {tool:30}{s.get('action', ''):16}{tainted:9}{note}")
+
+    print()
+    print(_paint(f"{n_models} models checked in {time.time() - start:.1f} s", "dim", color))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--scenario", help="only this scenario (default: every folder in models/generated)")
     ap.add_argument("--model", help="only runs generated by this model id")
     ap.add_argument("--recorded", action="store_true", help="show verdicts saved in run.json instead of re-running nuXmv")
+    ap.add_argument("--compact", action="store_true",
+                    help="short layout for a projector: one row per model, a summary per LLM, and one attack trace")
     args = ap.parse_args(argv)
 
     have_nuxmv = shutil.which("nuXmv") is not None
     live = have_nuxmv and not args.recorded
+    if args.compact:
+        return compact(args, live)
     if not have_nuxmv:
         print("NOTE: nuXmv is not on PATH. Showing the verdicts recorded at generation time.")
         print("      Install nuXmv (README, Install) to run the checks live.\n")

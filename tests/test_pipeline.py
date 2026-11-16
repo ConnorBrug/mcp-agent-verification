@@ -251,6 +251,32 @@ def test_demo_live_compares_with_reference_and_survives_a_missing_one(tmp_path, 
     assert "no reference model at reference/toy_unguarded.smv" in out
 
 
+def test_demo_compact_recorded_needs_no_nuxmv(tmp_path, monkeypatch, capsys):
+    import pipeline.demo as demo
+
+    verdicts = {
+        "G (tainted -> G action != send_external)": False,
+        "G (action = delete -> Y action = confirm)": True,
+        "G ((!privileged & X privileged) -> grant)": True,
+    }
+    _fake_run(tmp_path, "banking", "unguarded", "run_01", "fake:1b", UNGUARDED, verdicts)
+    _fake_run(tmp_path, "banking", "unguarded", "run_02", "fake:1b", None, {})
+    monkeypatch.setattr(demo, "GENERATED", tmp_path)
+    assert demo.main(["--compact", "--recorded"]) == 0
+    out = capsys.readouterr().out
+    assert "01 by 1B" in out and "ATTACK" in out and "nuXmv could not parse it" in out
+    assert "1/2" in out  # parses, per LLM
+
+
+@needs_nuxmv
+def test_demo_attack_trace_on_banking_reference():
+    import pipeline.demo as demo
+
+    trace = demo.attack_trace(demo.REFERENCE / "banking_unguarded.smv")
+    assert trace and trace[-1]["action"] == "send_external" and trace[-1]["tainted"] == "TRUE"
+    assert any(s["action"] == "read_untrusted" for s in trace)
+
+
 def test_demo_numbers_properties_as_in_safety_ltl():
     import pipeline.demo as demo
 
