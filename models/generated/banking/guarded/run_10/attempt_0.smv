@@ -1,0 +1,47 @@
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- attacker-controlled: whether an untrusted read carries a prompt injection
+
+-- Tool-to-action mapping:
+--   get_balance                   -> read_trusted   (user's own account data)
+--   get_iban                      -> read_trusted   (user's own account data)
+--   get_most_recent_transactions  -> read_trusted   (user's own transaction history)
+--   get_scheduled_transactions    -> read_trusted   (user's own scheduled transactions)
+--   get_user_info                 -> read_trusted   (user's own profile)
+--   read_file                     -> read_trusted   (local file the user owns)
+--   schedule_transaction          -> send_external  (sends payment instruction to external recipient)
+--   send_money                    -> send_external  (sends payment to external recipient)
+--   update_password               -> delete         (irreversible credential change)
+--   update_scheduled_transaction  -> send_external  (modifies external payment instruction)
+--   update_user_info              -> idle           (local profile edit; fits no abstract action)
+--   (no tool maps to read_untrusted, confirm, or request_grant)
+
+ASSIGN
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- Nondeterministic tool choice filtered by the policy layer.
+  -- Policy rule 1: while tainted, send_external is blocked.
+  -- Policy rule 2: delete is blocked unless confirmed in the immediately preceding step.
+  -- Policy rule 3: request_grant is blocked unless grant is present (no tool maps here, included for completeness).
+  next(action) := case
+    tainted & !confirmed     : {idle, read_trusted};
+    tainted & confirmed      : {idle, read_trusted, delete};
+    !tainted & !confirmed    : {idle, read_trusted, send_external};
+    TRUE                     : {idle, read_trusted, send_external, delete};
+  esac;
+
+  -- Taint is sticky: once injected content enters context it stays.
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- Confirmation is a one-step flag: authorises only the action immediately after it.
+  next(confirmed) := (action = confirm);
+
+  -- Privilege is granted only via request_grant with an explicit grant present.
+  next(privileged) := privileged | (action = request_grant & grant);
