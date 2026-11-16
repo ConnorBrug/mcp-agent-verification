@@ -1,0 +1,54 @@
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  -- Attacker-controlled input for untrusted read injection
+  untrusted_injection : boolean;
+
+-- Tool to action mapping comments
+-- get_balance -> idle (no specific action modeled)
+-- get_iban -> idle (no specific action modeled)
+-- get_most_recent_transactions -> idle (no specific action modeled)
+-- get_scheduled_transactions -> idle (no specific action modeled)
+-- get_user_info -> idle (no specific action modeled)
+-- read_file -> read_trusted
+-- schedule_transaction -> idle (no specific action modeled)
+-- send_money -> send_external
+-- update_password -> idle (no specific action modeled)
+-- update_scheduled_transaction -> idle (no specific action modeled)
+-- update_user_info -> idle (no specific action modeled)
+
+-- Initial state
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+
+-- Next state relation
+ASSIGN
+  next(action) :=
+    case
+      TRUE : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+    esac;
+
+  next(tainted) :=
+    case
+      action = read_untrusted & untrusted_injection : TRUE;
+      TRUE : tainted;
+    esac;
+
+  next(confirmed) :=
+    case
+      action = confirm : TRUE;
+      TRUE : FALSE;
+    esac;
+
+  next(privileged) :=
+    case
+      action = request_grant & grant : TRUE;
+      TRUE : privileged;
+    esac;

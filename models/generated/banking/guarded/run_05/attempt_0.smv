@@ -1,0 +1,53 @@
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+
+-- Tool mappings:
+-- get_balance -> read_trusted
+-- get_iban -> read_trusted
+-- get_most_recent_transactions -> read_trusted
+-- get_scheduled_transactions -> read_trusted
+-- get_user_info -> read_trusted
+-- read_file -> read_trusted
+-- schedule_transaction -> send_external
+-- send_money -> send_external
+-- update_password -> request_grant
+-- update_scheduled_transaction -> send_external
+-- update_user_info -> request_grant
+
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+
+  next(action) := case
+    -- read_trusted actions
+    (action = get_balance) | (action = get_iban) | (action = get_most_recent_transactions) | (action = get_scheduled_transactions) | (action = get_user_info) | (action = read_file) : read_trusted;
+    -- send_external actions
+    (action = schedule_transaction) | (action = send_money) : send_external;
+    -- confirm action
+    action = confirm : confirm;
+    -- delete action
+    action = delete : delete;
+    -- request_grant actions
+    (action = update_password) | (action = update_user_info) : request_grant;
+    -- idle action
+    TRUE : idle;
+  esac;
+
+  next(tainted) := case
+    (action = read_untrusted) & prompt_injection : TRUE;
+    TRUE : tainted;
+  esac;
+
+  next(confirmed) := (action = confirm);
+
+  next(privileged) := case
+    (action = request_grant) & grant : TRUE;
+    TRUE : privileged;
+  esac;

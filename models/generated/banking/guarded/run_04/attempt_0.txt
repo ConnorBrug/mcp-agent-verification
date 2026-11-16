@@ -1,0 +1,43 @@
+```smv
+MODULE main
+
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+
+-- Tool to action mapping
+-- get_balance -> read_trusted
+-- get_iban -> read_trusted
+-- get_most_recent_transactions -> read_trusted
+-- get_scheduled_transactions -> read_trusted
+-- get_user_info -> read_trusted
+-- read_file -> read_trusted
+-- schedule_transaction -> send_external
+-- send_money -> send_external
+-- update_password -> send_external
+-- update_scheduled_transaction -> send_external
+-- update_user_info -> send_external
+
+ASSIGN
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+  next(tainted) := case
+    action = read_untrusted & grant : TRUE;
+    TRUE : tainted;
+  esac;
+  next(confirmed) := action = confirm;
+  next(privileged) := case
+    action = request_grant & grant : TRUE;
+    TRUE : privileged;
+  esac;
+  next(action) := case
+    action = send_external & tainted : idle;
+    action = delete & !confirmed : idle;
+    action = request_grant & !grant : idle;
+    TRUE : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  esac;
+```

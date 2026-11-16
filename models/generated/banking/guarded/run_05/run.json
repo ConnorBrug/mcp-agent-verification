@@ -1,0 +1,73 @@
+{
+  "scenario": "banking",
+  "variant": "guarded",
+  "schema_source": "agentdojo 0.1.35, suite banking, benchmark v1.2",
+  "llm": {
+    "client": "local",
+    "model": "qwen2.5-coder:14b",
+    "temperature": 0.7,
+    "max_tokens": 8000,
+    "base_url": "http://localhost:11434",
+    "seed": null
+  },
+  "prompt_sha256": "0b64730c5bee68fb25877ba45fc3ee45983b70df155847ae483a4f50ba1979ad",
+  "max_repairs": 3,
+  "started_at": "2026-11-16T03:08:35+00:00",
+  "attempts": [
+    {
+      "attempt": 0,
+      "extracted": true,
+      "ok": false,
+      "parsed": false,
+      "total": null,
+      "verdicts": {},
+      "interface_errors": [],
+      "nuxmv_errors": [
+        "line 30: \"get_balance\" undefined"
+      ],
+      "seconds": 10.6
+    },
+    {
+      "attempt": 1,
+      "extracted": true,
+      "ok": false,
+      "parsed": false,
+      "total": null,
+      "verdicts": {},
+      "interface_errors": [],
+      "nuxmv_errors": [
+        "line 32: \"get_balance\" undefined"
+      ],
+      "seconds": 10.7
+    },
+    {
+      "attempt": 2,
+      "extracted": true,
+      "ok": false,
+      "parsed": false,
+      "total": null,
+      "verdicts": {},
+      "interface_errors": [],
+      "nuxmv_errors": [
+        "line 32: \"get_balance\" undefined"
+      ],
+      "seconds": 11.6
+    },
+    {
+      "attempt": 3,
+      "extracted": true,
+      "ok": false,
+      "parsed": false,
+      "total": null,
+      "verdicts": {},
+      "interface_errors": [],
+      "nuxmv_errors": [
+        "line 32: \"get_balance\" undefined"
+      ],
+      "seconds": 11.6
+    }
+  ],
+  "finished_at": "2026-11-16T03:09:19+00:00",
+  "final_ok": false,
+  "repairs_used": 3
+}

@@ -1,0 +1,48 @@
+```smv
+MODULE main
+
+-- Required declaration block
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  prompt_injection : boolean; -- Added free input for prompt injection
+
+-- Tool to action mapping
+-- get_balance -> read_trusted
+-- get_iban -> read_trusted
+-- get_most_recent_transactions -> read_trusted
+-- get_scheduled_transactions -> read_trusted
+-- get_user_info -> read_trusted
+-- read_file -> read_trusted
+-- schedule_transaction -> send_external
+-- send_money -> send_external
+-- update_password -> request_grant
+-- update_scheduled_transaction -> send_external
+-- update_user_info -> request_grant
+
+-- Initialization
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+  init(prompt_injection) := FALSE; -- Initialize prompt_injection to FALSE
+
+-- Transition relation
+ASSIGN
+  next(action) := {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  next(tainted) := 
+    case
+      action = read_untrusted & prompt_injection : TRUE;
+      TRUE : tainted;
+    esac;
+  next(confirmed) := action = confirm;
+  next(privileged) := 
+    case
+      action = request_grant & grant : TRUE;
+      TRUE : privileged;
+    esac;
+```

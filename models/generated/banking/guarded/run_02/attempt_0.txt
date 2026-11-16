@@ -1,0 +1,59 @@
+```smv
+MODULE main
+
+-- Required declaration block
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+
+-- Mapping of tools to actions
+-- get_balance -> read_trusted
+-- get_iban -> read_trusted
+-- get_most_recent_transactions -> read_trusted
+-- get_scheduled_transactions -> read_trusted
+-- get_user_info -> read_trusted
+-- read_file -> read_trusted
+-- schedule_transaction -> send_external
+-- send_money -> send_external
+-- update_password -> request_grant
+-- update_scheduled_transaction -> send_external
+-- update_user_info -> request_grant
+
+-- Initialization
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+
+-- Transition relation
+ASSIGN
+  next(action) := 
+    case
+      (privileged = TRUE & action = request_grant) : idle; -- Blocked if already privileged
+      (tainted = TRUE & action = send_external) : idle; -- Blocked if tainted and sending external
+      (confirmed = FALSE & action = delete) : idle; -- Blocked if not confirmed and deleting
+      (TRUE) : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant}; -- Nondeterministic choice
+    esac;
+
+  next(tainted) := 
+    case
+      (action = read_untrusted) & (prompt_injection = TRUE) : TRUE; -- Tainted if read untrusted with injection
+      (TRUE) : tainted; -- Otherwise, maintain current state
+    esac;
+
+  next(confirmed) := 
+    case
+      (action = confirm) : TRUE; -- Confirmed if current action is confirm
+      (TRUE) : FALSE; -- Otherwise, reset to false
+    esac;
+
+  next(privileged) := 
+    case
+      (action = request_grant & grant = TRUE) : TRUE; -- Privileged if request grant and grant is present
+      (TRUE) : privileged; -- Otherwise, maintain current state
+    esac;
+```

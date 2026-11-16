@@ -1,0 +1,53 @@
+MODULE main
+
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- free input representing whether an untrusted read carries an injection
+
+DEFINE
+  -- Tool mappings to actions
+  get_balance_action := read_trusted;
+  get_iban_action := read_trusted;
+  get_most_recent_transactions_action := read_trusted;
+  get_scheduled_transactions_action := read_trusted;
+  get_user_info_action := read_trusted;
+  read_file_action := read_trusted;
+  schedule_transaction_action := send_external;
+  send_money_action := send_external;
+  update_password_action := idle;  -- No direct action mapping, assumed secure
+  update_scheduled_transaction_action := send_external;
+  update_user_info_action := idle;  -- No direct action mapping, assumed secure
+
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+  init(grant) := FALSE;
+
+  next(action) := 
+    case
+      TRUE : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+    esac;
+
+  next(tainted) := 
+    case
+      action = read_untrusted & injection : TRUE;
+      TRUE : tainted;
+    esac;
+
+  next(confirmed) := 
+    case
+      action = confirm : TRUE;
+      TRUE : FALSE;
+    esac;
+
+  next(privileged) := 
+    case
+      action = request_grant & grant : TRUE;
+      TRUE : privileged;
+    esac;
