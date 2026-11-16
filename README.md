@@ -35,7 +35,7 @@ which violations reproduce.
 | `models/reference/` | Hand-written SMV models |
 | `models/generated/` | LLM-written SMV models and their run logs |
 | `properties/` | LTL property file (`safety.ltl`) |
-| `pipeline/` | Tool schema export, prompts, LLM clients, nuXmv check and repair loop |
+| `pipeline/` | Tool schema export, prompts, LLM clients, nuXmv check and repair loop, demo |
 | `sandbox/` | Replay of counterexamples as real tool calls in AgentDojo |
 | `eval/` | Counterexample parser (`parse_trace.py`); metric scripts to come |
 | `traces/` | nuXmv counterexamples as JSON, and replay results in `traces/replay/` |
@@ -89,7 +89,7 @@ binary or the archive to this repo. Each person downloads it.
    Make sure `~/.local/bin` is on your `PATH`.
 
 **Troubleshooting: `GLIBC_2.38 not found (required by libstdc++.so.6)`.** On newer distros (seen
-on Ubuntu 26.04) the glibc bundled with nuXmv conflicts with the system `libstdc++`. Load every
+on Ubuntu 24.04 and 26.04) the glibc bundled with nuXmv conflicts with the system `libstdc++`. Load every
 bundled library except `libc` and `libm` instead of using the wrapper:
 
 ```sh
@@ -212,6 +212,9 @@ See `pipeline/README.md`. In short, with a model served by Ollama:
 make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<model id>
 ```
 
+The banking runs for two models are committed in `models/generated/banking/`. Their settings are
+in `models/generated/README.md`, and the results so far are in `pipeline/README.md`.
+
 ### 5. Demo
 
 ```sh
@@ -253,6 +256,6 @@ Without nuXmv on the `PATH`, `make demo` falls back to the recorded verdicts by 
 - `docs/metrics.md`: formulas for parse rate, verdict agreement, trace admissibility, and
   confirmed-violation rate.
 - `docs/AI_USE.md`: log of AI tool use, for the report's disclosure.
-- `pipeline/README.md`: LLM backend setup and how to run generation.
+- `pipeline/README.md`: LLM backend setup, how to run generation, and the banking results so far.
 - `models/generated/README.md`: layout of generated runs and their logs.
 - `sandbox/README.md`: replay details and limits.

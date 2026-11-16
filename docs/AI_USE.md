@@ -55,3 +55,15 @@ Entry format:
 - **What it produced:** 'traces/agent_unguarded.json'; 'traces/replay/'; assisted in 'sandbox/replay.py'
 - **Prompt summary:** Claude walked me through the process of running the counterexample and summarized the results into a table (in the report). 
 - **Human review:** Xiaodi Shao, the user, ran the code and reviewed both the code and the results. 
+
+## 2026-11-15: Local model setup and demo
+
+- **Tool and model:** Claude Code, Claude Fable 5.2.
+- **Who ran it:** Connor Brugger.
+- **What it produced:** Assisted with the SMV syntax section in `pipeline/prompt.py`,
+  `pipeline/demo.py`, tests, the CI workflow, and README updates. Helped set up the local model
+  server. The files in `models/generated/` are output of the pipeline's LLMs, not of this tool.
+- **Prompt summary:** Set up a local model for the pipeline, run the banking generations, and
+  make the results easy to check and present.
+- **Human review:** Connor Brugger ran the tests and the demo with nuXmv, and read the prompt's
+  syntax section and a generated model against the demo output.

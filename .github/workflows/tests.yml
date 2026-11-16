@@ -2,7 +2,8 @@
 #
 # nuXmv is not installed here: its license does not allow redistribution, and each person
 # downloads it (README, Install). The tests that need nuXmv skip themselves, and the demo runs in
-# --recorded mode. Run `make test` and `make demo` locally for the nuXmv checks.
+# --recorded mode. Here 13 tests run and 9 skip; `make test` with nuXmv runs all 22. Run
+# `make test` and `make demo` locally for the nuXmv checks.
 name: tests
 
 on:
