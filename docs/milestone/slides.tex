@@ -1,0 +1,277 @@
+\documentclass[aspectratio=169,11pt]{beamer}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs,tabularx}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning}
+
+\definecolor{ink}{HTML}{1B1F24}
+\definecolor{muted}{HTML}{5B6470}
+\definecolor{accent}{HTML}{2457C5}
+\definecolor{soft}{HTML}{E8EEFB}
+\definecolor{bad}{HTML}{B3261E}
+\definecolor{good}{HTML}{1E7B34}
+
+\setbeamertemplate{navigation symbols}{}
+\setbeamercolor{normal text}{fg=ink,bg=white}
+\setbeamercolor{frametitle}{fg=ink,bg=white}
+\setbeamercolor{structure}{fg=accent}
+\setbeamerfont{frametitle}{size=\Large,series=\bfseries}
+\setbeamertemplate{frametitle}{\vspace{0.6em}\insertframetitle\par\vspace{-0.2em}{\color{accent}\rule{2.2em}{2pt}}}
+\setbeamertemplate{itemize items}{\color{accent}\textbullet}
+\setbeamertemplate{footline}{\hfill{\color{muted}\scriptsize\insertframenumber/\inserttotalframenumber}\hspace{1em}\vspace{0.6em}}
+
+\newcommand{\act}[1]{\texttt{#1}}
+\newcommand{\acro}[1]{\vfill{\color{muted}\scriptsize #1}}
+\newcommand{\LTLG}{\mathbf{G}}
+\newcommand{\LTLX}{\mathbf{X}}
+\newcommand{\LTLY}{\mathbf{Y}}
+\newcommand{\holds}{{\color{good}holds}}
+\newcommand{\viol}{{\color{bad}violated}}
+
+\begin{document}
+
+\newcommand{\stat}[1]{{\sffamily\fontsize{30}{32}\selectfont\bfseries #1}}
+\newcommand{\subnote}[1]{{\small\color{muted} #1}}
+
+% 1 ---------------------------------------------------------------------------
+\begin{frame}[plain]
+\vspace{2.2em}
+{\color{accent}\small\bfseries CS 3892 \quad Group B \quad Topic 8: formal models of agentic AI}\\[0.8em]
+{\LARGE\bfseries Can an LLM write a checkable model\\[0.2em] of a tool-using AI agent?}\\[1.6em]
+\begin{tabular}{@{}l@{\hspace{2.2em}}l@{\hspace{2.2em}}l@{}}
+{\large Teo Kitanovski} & {\large Connor Brugger} & {\large Xiaodi Shao}\\
+{\footnotesize\color{muted} reference models} & {\footnotesize\color{muted} LLM pipeline, nuXmv checks} &
+{\footnotesize\color{muted} sandbox replay}
+\end{tabular}\\[1.4em]
+{\small\color{muted} Milestone, 17 November 2026}\\[0.3em]
+{\small\ttfamily github.com/ConnorBrug/mcp-agent-verification}
+\end{frame}
+
+% 2 ---------------------------------------------------------------------------
+\begin{frame}{What we built}
+\centering
+\vspace{1em}
+\begin{tikzpicture}[
+  box/.style={draw=accent,fill=soft,rounded corners=4pt,minimum height=3.2em,
+              text width=6.6em,align=center,font=\normalsize\bfseries},
+  arr/.style={-{Stealth[length=6pt]},very thick,color=ink},
+  lbl/.style={font=\small,align=center,text width=7.4em,color=muted}]
+\node[box] (s) {Agent's tools};
+\node[box,right=2.2em of s] (m) {Model\\(written by LLM)};
+\node[box,right=2.2em of m] (c) {Model checker\\(nuXmv)};
+\node[box,right=2.2em of c] (r) {Replay attack\\in sandbox};
+\draw[arr] (s) -- (m); \draw[arr] (m) -- (c); \draw[arr] (c) -- (r);
+\node[lbl,below=0.5em of s] {11 real\\banking tools};
+\node[lbl,below=0.5em of m] {local LLM writes it};
+\node[lbl,below=0.5em of c] {proves safe, or gives an attack trace};
+\node[lbl,below=0.5em of r] {run the trace as real tool calls};
+\node[font=\small\bfseries,color=good,above=0.4em of m] {20 models};
+\node[font=\small\bfseries,color=good,above=0.4em of c] {all checked};
+\node[font=\small\bfseries,color=accent,above=0.4em of r] {works on toy model};
+\end{tikzpicture}
+
+\vspace{2em}
+\raggedright
+\textbf{Changed since the proposal:} we run the LLM on our own GPU instead of Vanderbilt's
+Amplify (its keys need a university billing account), and the prompt now includes SMV syntax rules
+(parse rate went from 0 of 6 to 6 of 6).
+\end{frame}
+
+% 3 ---------------------------------------------------------------------------
+\begin{frame}{What ``safe'' means: three properties}
+\large
+\renewcommand{\arraystretch}{1.6}
+\begin{tabular}{@{}l@{\hspace{1em}}l@{}}
+\textbf{P1} & $\LTLG(\act{tainted} \rightarrow \LTLG(\act{action} \neq \act{send\_external}))$\\[-0.9em]
+ & \subnote{After reading an injected input, the agent never sends data out.}\\
+\textbf{P2} & $\LTLG(\act{action} = \act{delete} \rightarrow \LTLY(\act{action} = \act{confirm}))$\\[-0.9em]
+ & \subnote{Every delete comes right after a user confirm.}\\
+\textbf{P3} & $\LTLG((\neg\act{privileged} \wedge \LTLX\,\act{privileged}) \rightarrow \act{grant})$\\[-0.9em]
+ & \subnote{The agent never gains privileges without a grant.}\\
+\end{tabular}
+
+\vfill
+\normalsize
+\small
+Model: transition system $M = (S, I, T)$. A run is a path $s_0 s_1 s_2 \ldots$ with $s_0 \in I$,
+$(s_i, s_{i+1}) \in T$. \ $M \models \varphi$ iff \emph{every} run satisfies $\varphi$. An
+\textbf{attack trace} is a run that violates $\varphi$.\\[0.3em]
+$\act{tainted}_{i+1} = \act{tainted}_i \vee (\act{action}_i = \act{read\_untrusted} \wedge
+\act{injection}_i)$, \ $\act{tainted}_0 = \bot$ \quad {\color{muted}(the attacker picks
+\act{injection})}\\[0.3em]
+$\LTLG\varphi$: $\varphi$ at every step from now on. \quad $\LTLX\varphi$: at the next step. \quad
+$\LTLY\varphi$: at the previous step.
+\end{frame}
+
+% 4 ---------------------------------------------------------------------------
+\begin{frame}{How we score the LLM's models}
+\large
+Each LLM model $g$ is compared to a hand-written reference model $\mathrm{ref}(g)$.
+\vspace{1em}
+
+\renewcommand{\arraystretch}{2.4}
+\begin{tabular}{@{}l@{\hspace{1.2em}}l@{}}
+\textbf{Agreement} &
+$\mathrm{VA} = \dfrac{\#\{(g,\varphi) : g \text{ and } \mathrm{ref}(g) \text{ give the same verdict on } \varphi\}}{3\,|G|}$\\
+\textbf{False-safe} &
+$\mathrm{FS} = \dfrac{\#\{(g,\varphi) : g \models \varphi \text{ but } \mathrm{ref}(g) \not\models \varphi\}}{\#\{(g,\varphi) : \mathrm{ref}(g) \not\models \varphi\}}$\\
+\end{tabular}
+
+\vspace{1em}
+\normalsize
+Parse rate: share of the LLM's models that nuXmv accepts. A model it cannot parse scores 0 on VA.\\
+VA: how often the LLM's model gets the right answer.\\
+FS: real attacks the LLM's model calls safe. This is the dangerous mistake.\\[0.5em]
+\subnote{$G$: the LLM's models. $\varphi$: one of P1, P2, P3. Goal from the proposal: VA $\geq 0.8$, FS
+$\leq 0.1$.}
+\end{frame}
+
+% 5 ---------------------------------------------------------------------------
+\begin{frame}[fragile]{Live demo}
+\Large
+\begin{verbatim}
+$ make demo
+\end{verbatim}
+\normalsize
+\vspace{0.3em}
+nuXmv checks 22 models right now: 2 hand-written, 20 written by the LLM. It shows:
+\begin{itemize}\setlength\itemsep{0.5em}
+\item \textbf{One row per model:} \textcolor{good}{safe} or \textcolor{bad}{ATTACK} for P1, P2, P3,
+  and whether it matches the hand-written answer.
+\item \textbf{Two versions:} unguarded = the tools as they are; guarded = tools plus a policy that
+  blocks unsafe actions.
+\item \textbf{A real attack trace} on the banking tools: read transaction history carrying an
+  injection, then send money out. That breaks P1.
+\end{itemize}
+\vfill
+\subnote{Run from the repo folder inside WSL Ubuntu (type \texttt{wsl} first in PowerShell). The
+README has the setup.}
+\end{frame}
+
+% 6 ---------------------------------------------------------------------------
+\begin{frame}{Results so far: banking, best LLM (Qwen 27B)}
+\centering
+\vspace{0.6em}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.32\textwidth}\centering
+\stat{10 / 10}\\[0.3em]
+parse\\
+\subnote{smaller 14B LLM: 8 / 10}
+\end{column}
+\begin{column}{0.32\textwidth}\centering
+\stat{0.73}\\[0.3em]
+agreement VA\\
+\subnote{goal: 0.8}
+\end{column}
+\begin{column}{0.32\textwidth}\centering
+\stat{\color{bad}3 of 5}\\[0.3em]
+real attacks called safe\\
+\subnote{FS = 0.6, goal: 0.1}
+\end{column}
+\end{columns}
+
+\vspace{2em}
+\raggedright\large
+\textbf{Takeaway:} the LLM writes valid models. Its mistakes are in the meaning, not the syntax,
+and some of them hide real attacks.
+\end{frame}
+
+% 7 ---------------------------------------------------------------------------
+\begin{frame}[fragile]{Why the LLM gets it wrong}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.46\textwidth}
+\large\textbf{1. It trusts the wrong tool}\\[0.6em]
+\normalsize
+It calls \act{read\_file} a trusted read. Then nothing can ever taint the agent, so P1 is
+``safe'' for the wrong reason.\\[0.8em]
+\subnote{This is the 3 of 5 missed attacks.}
+\end{column}
+\begin{column}{0.5\textwidth}
+\large\textbf{2. Its guard is one step late}\\[0.6em]
+\normalsize
+nuXmv's attack trace on a ``guarded'' LLM model:\\[0.5em]
+\begin{tabular}{@{}cll@{}}
+\toprule
+step & action & tainted\\
+\midrule
+1 & \act{read\_untrusted} (injected) & false\\
+2 & {\color{bad}\act{send\_external}} & {\color{bad}true}\\
+\bottomrule
+\end{tabular}\\[0.6em]
+The guard checks \act{tainted} before it turns true.
+\end{column}
+\end{columns}
+\vfill
+\small
+\textbf{Sandbox replay (RQ3):} on our toy model, the P1 and P2 attack traces work as real tool
+calls in AgentDojo (read injected email, then send email; delete with no confirm).
+\end{frame}
+
+% 8 ---------------------------------------------------------------------------
+\begin{frame}{Next steps, and our Showcase poster}
+\begin{columns}[T,onlytextwidth]
+\begin{column}{0.38\textwidth}
+\large\textbf{Before the final}\\[0.5em]
+\normalsize
+\begin{itemize}\setlength\itemsep{0.5em}
+\item 4 more scenarios: email, travel, Slack, file and web tools
+\item Replay the LLM models' attacks in the sandbox
+\item Compare against random tool sequences
+\end{itemize}
+\end{column}
+\begin{column}{0.58\textwidth}
+\centering
+\begin{tikzpicture}[
+  pane/.style={draw=accent,fill=soft,rounded corners=2pt,align=center,font=\footnotesize,
+               inner sep=3pt,anchor=north west,text width=2.0cm,minimum height=1.5cm},
+  x=1cm,y=1cm]
+\draw[draw=muted,fill=white] (0,0) rectangle (7.4,-4.6);
+\node[draw=accent,fill=accent,text=white,rounded corners=2pt,anchor=north west,
+      minimum width=7.0cm,minimum height=0.6cm,font=\footnotesize\bfseries] at (0.2,-0.2)
+  {Title, names, Vanderbilt CS};
+\node[pane] at (0.2,-1.0) {\textbf{Problem}\\injected input};
+\node[pane] at (0.2,-2.8) {\textbf{Properties}\\P1 to P3};
+\node[pane] at (2.65,-1.0) {\textbf{Pipeline}\\diagram};
+\node[pane] at (2.65,-2.8) {\textbf{One attack}\\trace + replay};
+\node[pane] at (5.1,-1.0) {\textbf{Results}\\chart};
+\node[pane] at (5.1,-2.8) {\textbf{Takeaways}\\+ QR to repo};
+\end{tikzpicture}\\[0.3em]
+\subnote{Poster draft layout. File due 3 December.}
+\end{column}
+\end{columns}
+\vfill
+\centering\Large Questions?
+\end{frame}
+
+% backup ----------------------------------------------------------------------
+\begin{frame}[noframenumbering]{Backup: all 20 models}
+\small
+\centering
+\renewcommand{\arraystretch}{1.2}
+\begin{tabular}{@{}llccccc@{}}
+\toprule
+LLM & variant & parse, 1st try & parse, final & VA & exact match & FS\\
+\midrule
+\act{qwen2.5-coder:14b} & unguarded & 1/5 & 4/5 & 0.53 & 0/4 & 0/4\\
+                        & guarded   & 3/5 & 4/5 & 0.27 & 0/4 & n/a\\
+\act{qwen3.8:27b}       & unguarded & 5/5 & 5/5 & 0.73 & 1/5 & 3/5\\
+                        & guarded   & 5/5 & 5/5 & 0.73 & 3/5 & n/a\\
+\bottomrule
+\end{tabular}
+
+\vspace{1em}
+\raggedright
+\begin{itemize}\setlength\itemsep{0.3em}
+\item Unguarded: the LLM models the tools as they are. Guarded: it also models a policy that blocks
+  unsafe actions.
+\item nuXmv found 23 violations in the 18 models that parse. At most 6 can be real attacks: a
+  violation counts only if the hand-written model has it too.
+\item Failed parses: the LLM used tool names like \act{get\_balance} as if they were SMV variables.
+\end{itemize}
+\subnote{FS is n/a for guarded: the hand-written guarded model has no attacks to miss. 5 runs per cell,
+temperature 0.7, up to 3 repair rounds using nuXmv's error messages.}
+\end{frame}
+
+\end{document}
