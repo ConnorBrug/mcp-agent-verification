@@ -46,6 +46,26 @@ def test_prompt_lists_every_tool_and_policy_only_when_guarded():
     assert "no policy layer" in unguarded
 
 
+def test_prompt_has_syntax_section_that_leaks_no_mapping():
+    from pipeline.prompt import SMV_SYNTAX
+
+    schemas = load_schemas("banking")
+    prompt = build_messages(schemas, "unguarded")[1]["content"]
+    assert "## SMV syntax" in prompt and SMV_SYNTAX in prompt
+    # the syntax section must not mention any tool or any abstract action of the interface
+    for word in [t["name"] for t in schemas["tools"]] + ["read_untrusted", "send_external", "request_grant", "tainted"]:
+        assert word not in SMV_SYNTAX
+
+
+@pytest.mark.skipif(shutil.which("nuXmv") is None, reason="nuXmv not on PATH")
+def test_prompt_syntax_example_is_valid_smv():
+    from pipeline.prompt import SMV_SYNTAX
+
+    example = extract_smv(SMV_SYNTAX)
+    r = run_nuxmv(example, properties=REPO / "tests" / "empty.ltl")
+    assert r.parsed and r.total is True
+
+
 # --- interface lint ----------------------------------------------------------
 
 def test_lint_passes_reference_models():
@@ -183,6 +203,52 @@ def test_generate_cli_with_local_backend(fake_server, tmp_path, monkeypatch, cap
     log = json.loads((tmp_path / "banking/guarded/run_01/run.json").read_text())
     assert log["final_ok"] and log["llm"]["client"] == "local" and log["llm"]["base_url"] == url
     assert "first try ok" in capsys.readouterr().out
+
+
+# --- demo ---------------------------------------------------------------------
+
+def _fake_run(root, scenario, variant, name, model, smv, verdicts):
+    run = root / scenario / variant / name
+    run.mkdir(parents=True)
+    ok = smv is not None
+    if ok:
+        (run / "final.smv").write_text(smv)
+    attempt = {"attempt": 0, "extracted": ok, "ok": ok, "verdicts": verdicts}
+    (run / "run.json").write_text(json.dumps({"llm": {"model": model}, "attempts": [attempt], "final_ok": ok}))
+
+
+def test_demo_recorded_mode_needs_no_nuxmv(tmp_path, monkeypatch, capsys):
+    import pipeline.demo as demo
+
+    _fake_run(tmp_path, "banking", "guarded", "run_01", "fake:1b", GUARDED, {"G p": True})
+    _fake_run(tmp_path, "banking", "guarded", "run_02", "fake:1b", None, {})
+    (tmp_path / "banking" / "guarded" / "run_03").mkdir()  # a run that crashed before writing anything
+    monkeypatch.setattr(demo, "GENERATED", tmp_path)
+    assert demo.main(["--recorded"]) == 0
+    out = capsys.readouterr().out
+    assert "read from each run.json" in out
+    assert "DOES NOT PARSE" in out and "run_03  skipped" in out
+    assert "1 of 2" in out  # parse rate for fake:1b
+
+
+@needs_nuxmv
+def test_demo_live_compares_with_reference_and_survives_a_missing_one(tmp_path, monkeypatch, capsys):
+    import pipeline.demo as demo
+
+    ref = tmp_path / "reference"
+    ref.mkdir()
+    (ref / "toy_guarded.smv").write_text(GUARDED)
+    gen = tmp_path / "generated"
+    _fake_run(gen, "toy", "guarded", "run_01", "fake:1b", GUARDED, {})
+    _fake_run(gen, "toy", "guarded", "run_02", "fake:1b", UNGUARDED, {})
+    _fake_run(gen, "toy", "unguarded", "run_01", "fake:1b", UNGUARDED, {})  # no reference for this cell
+    monkeypatch.setattr(demo, "GENERATED", gen)
+    monkeypatch.setattr(demo, "REFERENCE", ref)
+    monkeypatch.setattr(demo, "REPO", tmp_path)
+    assert demo.main([]) == 0
+    out = capsys.readouterr().out
+    assert "matches reference" in out and "agrees on 0 of 3" in out
+    assert "no reference model at reference/toy_unguarded.smv" in out
 
 
 def test_run_dirs_do_not_overwrite(tmp_path, monkeypatch):
