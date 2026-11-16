@@ -1,0 +1,41 @@
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;   -- free input: unconstrained, no init/next
+  injection  : boolean;   -- free input: attacker decides whether an untrusted read carries a prompt injection
+
+ASSIGN
+  init(action)     := idle;
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- Tool-to-action mapping:
+  --   get_balance               -> read_trusted   (user's own account data)
+  --   get_iban                  -> read_trusted   (user's own account data)
+  --   get_most_recent_transactions -> read_trusted (user's own transaction history)
+  --   get_scheduled_transactions  -> read_trusted (user's own data)
+  --   get_user_info             -> read_trusted   (user's own profile)
+  --   read_file                 -> read_trusted   (local file the user owns)
+  --   schedule_transaction      -> idle           (non-destructive mutation, no specific action fits)
+  --   send_money                -> send_external  (sends value outside trust boundary)
+  --   update_password           -> idle           (non-destructive mutation)
+  --   update_scheduled_transaction -> idle       (non-destructive mutation)
+  --   update_user_info          -> idle           (non-destructive mutation)
+  --   (do nothing)              -> idle
+  --
+  -- No tool maps to: read_untrusted, confirm, delete, request_grant
+
+  next(action) := {idle, read_trusted, send_external};
+
+  -- tainted: latches TRUE when a tainted read_untrusted occurs; never resets
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- confirmed: one-step flag, TRUE at t+1 iff the action at t was confirm
+  next(confirmed) := (action = confirm);
+
+  -- privileged: may be granted only via request_grant + grant; once set, stays
+  next(privileged) := privileged | (action = request_grant & grant);

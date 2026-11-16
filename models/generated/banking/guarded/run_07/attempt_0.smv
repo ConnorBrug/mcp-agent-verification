@@ -1,0 +1,51 @@
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- attacker-controlled free input: whether an untrusted read carries a prompt injection
+
+ASSIGN
+  init(tainted)    := FALSE;
+  init(confirmed)   := FALSE;
+  init(privileged)  := FALSE;
+
+  -- Agent nondeterministically selects a tool each step.
+  -- Tool-to-action mapping:
+  --   get_balance                  -> read_trusted
+  --   get_iban                     -> read_trusted
+  --   get_most_recent_transactions -> read_trusted
+  --   get_scheduled_transactions   -> read_trusted
+  --   get_user_info                -> read_trusted
+  --   read_file                    -> read_untrusted  (arbitrary path, may be untrusted)
+  --   send_money                   -> send_external
+  --   schedule_transaction         -> idle  (write to own account, no matching abstract action)
+  --   update_password              -> idle
+  --   update_scheduled_transaction -> idle
+  --   update_user_info             -> idle
+  --
+  -- Policy layer:
+  --   1. While tainted, send_external is blocked -> substituted with idle.
+  --   2. delete requires confirmed from previous step (vacuous: no tool maps to delete).
+  --   3. request_grant requires grant (vacuous: no tool maps to request_grant).
+
+  next(action) := case
+    -- Policy rule 1: block send_external while tainted
+    tainted : {idle, read_trusted, read_untrusted};
+    TRUE    : {idle, read_trusted, read_untrusted, send_external};
+  esac;
+
+  -- Taint: latches TRUE once an untrusted read carried an injection; never resets.
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- Confirmation: one-step flag, TRUE exactly when the previous step was confirm.
+  next(confirmed) := (action = confirm);
+
+  -- Privilege: can only be gained via request_grant with an explicit grant present.
+  -- Once granted, stays granted (reference model behaviour).
+  next(privileged) := case
+    (action = request_grant) & grant : TRUE;
+    TRUE                             : privileged;
+  esac;

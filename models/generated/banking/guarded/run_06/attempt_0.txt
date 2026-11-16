@@ -1,0 +1,63 @@
+```smv
+MODULE main
+-- Tool-to-action mapping:
+--   get_balance                -> read_trusted   (reading own account balance)
+--   get_iban                   -> read_trusted   (reading own IBAN)
+--   get_most_recent_transactions -> read_trusted (reading own transaction history)
+--   get_scheduled_transactions   -> read_trusted (reading own scheduled transactions)
+--   get_user_info              -> read_trusted   (reading own user info)
+--   read_file                  -> read_untrusted (reading arbitrary file, untrusted source)
+--   schedule_transaction       -> idle           (mutation within trust boundary, no matching action)
+--   send_money                 -> send_external  (sends value outside trust boundary)
+--   update_password            -> idle           (mutation within trust boundary, no matching action)
+--   update_scheduled_transaction -> idle        (mutation within trust boundary, no matching action)
+--   update_user_info           -> idle           (mutation within trust boundary, no matching action)
+
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- attacker input: TRUE means the untrusted read carries a prompt injection
+  raw_action : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+DEFINE
+  -- Policy checks (applied to the raw choice the agent made this step)
+  blocked_send  := raw_action = send_external & tainted;
+  blocked_delete := raw_action = delete & !confirmed;
+  blocked_grant := raw_action = request_grant & !grant;
+
+  -- Effective action after policy filtering (a blocked call becomes idle)
+  effective := case
+    blocked_send   : idle;
+    blocked_delete : idle;
+    blocked_grant  : idle;
+    TRUE           : raw_action;
+  esac;
+
+ASSIGN
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- grant and injection are free inputs: no init, no next
+
+  -- Agent nondeterministically picks a tool action each step
+  next(raw_action) := {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+  -- action records the post-policy effective action
+  action := effective;
+
+  -- tainted: latches TRUE once an injected untrusted read occurs
+  next(tainted) := tainted | (raw_action = read_untrusted & injection);
+
+  -- confirmed: one-step flag, TRUE exactly when the previous step was a confirm
+  next(confirmed) := (raw_action = confirm);
+
+  -- privileged: becomes TRUE only via a successful request_grant (grant present)
+  next(privileged) := case
+    raw_action = request_grant & grant : TRUE;
+    TRUE                               : privileged;
+  esac;
+```

@@ -1,0 +1,47 @@
+```smv
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;       -- free input: explicit privilege grant
+  injection  : boolean;       -- free input: attacker decides if untrusted read carries injection
+
+-- Tool-to-action mapping:
+--   get_balance                  -> read_trusted   (reads user's own account balance)
+--   get_iban                     -> read_trusted   (reads user's own IBAN)
+--   get_most_recent_transactions -> read_trusted   (reads user's own transaction history)
+--   get_scheduled_transactions   -> read_trusted   (reads user's own scheduled transactions)
+--   get_user_info                -> read_trusted   (reads user's own profile)
+--   read_file                    -> read_trusted   (local file read, user-owned)
+--   schedule_transaction         -> idle           (write within system, no security-relevant category)
+--   send_money                   -> send_external  (sends funds outside trust boundary)
+--   update_password              -> idle           (write within system, no security-relevant category)
+--   update_scheduled_transaction -> idle           (write within system, no security-relevant category)
+--   update_user_info             -> idle           (write within system, no security-relevant category)
+
+ASSIGN
+  init(action)     := idle;
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+  -- grant     : free input, no init
+  -- injection : free input, no init
+
+  -- Agent nondeterministically picks one of the actions available via its tools.
+  -- Only idle, read_trusted, and send_external are reachable (no tool maps to
+  -- read_untrusted, confirm, delete, or request_grant).
+  next(action) := {idle, read_trusted, send_external};
+
+  -- Taint: once injected content enters context, it stays.
+  -- Becomes TRUE only if action is read_untrusted AND attacker injects.
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- Confirmation: one-step flag, TRUE exactly when previous action was confirm.
+  next(confirmed) := (action = confirm);
+
+  -- Privilege: granted only via request_grant with an explicit grant.
+  -- Once TRUE, stays TRUE.
+  next(privileged) := privileged | (action = request_grant & grant);
+```

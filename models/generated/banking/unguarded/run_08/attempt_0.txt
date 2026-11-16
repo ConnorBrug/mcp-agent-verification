@@ -1,0 +1,56 @@
+```smv
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection_present : boolean;  -- attacker input: whether the untrusted read carries a prompt injection
+
+-- Tool-to-action mapping:
+--   get_balance                  -> read_trusted   (read user's own account balance)
+--   get_iban                     -> read_trusted   (read user's own IBAN)
+--   get_most_recent_transactions -> read_trusted   (read user's own transaction history)
+--   get_scheduled_transactions   -> read_trusted   (read user's own scheduled transactions)
+--   get_user_info                -> read_trusted   (read user's own info)
+--   read_file                    -> read_untrusted (arbitrary file path, untrusted source)
+--   schedule_transaction         -> idle           (write/update, no matching abstract action)
+--   send_money                   -> send_external  (send money outside trust boundary)
+--   update_password              -> idle           (write/update, no matching abstract action)
+--   update_scheduled_transaction -> idle           (write/update, no matching abstract action)
+--   update_user_info             -> idle           (write/update, no matching abstract action)
+--   (no tool)                    -> confirm        (no tool maps here; agent never chooses it)
+--   (no tool)                    -> delete         (no tool maps here; agent never chooses it)
+--   (no tool)                    -> request_grant  (no tool maps here; agent never chooses it)
+
+ASSIGN
+  init(action) := idle;
+  init(tainted) := FALSE;
+  init(confirmed) := FALSE;
+  init(privileged) := FALSE;
+
+  -- grant is a free input: no init, no next (unconstrained environment input)
+  -- injection_present is a free input: no init, no next (attacker-controlled)
+
+  -- Agent nondeterministically picks one tool (or idles).
+  -- Only actions that correspond to at least one tool are reachable.
+  next(action) := {idle, read_trusted, read_untrusted, send_external};
+
+  -- Taint: once set, stays set. Becomes true if read_untrusted carried injection.
+  next(tainted) := case
+    tainted                              : TRUE;
+    action = read_untrusted & injection_present : TRUE;
+    TRUE                                 : FALSE;
+  esac;
+
+  -- Confirmed: one-step flag, true exactly when previous action was confirm.
+  next(confirmed) := (action = confirm);
+
+  -- Privileged: once granted, stays granted (reference model).
+  next(privileged) := case
+    privileged                  : TRUE;
+    action = request_grant & grant : TRUE;
+    TRUE                         : FALSE;
+  esac;
+```

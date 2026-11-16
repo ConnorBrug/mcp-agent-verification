@@ -1,0 +1,58 @@
+```smv
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+
+  -- attacker free input: decides whether an untrusted read carries a prompt injection
+  attacker_inject : boolean;
+
+  -- agent's raw (pre-policy) nondeterministic choice this step
+  raw_action : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+DEFINE
+  -- Policy rule 1: while tainted, send_external is blocked
+  blocked_external := tainted & (raw_action = send_external);
+  -- Policy rule 2: delete is blocked unless confirmed in the immediately preceding step
+  blocked_delete   := (raw_action = delete) & !confirmed;
+  -- Policy rule 3: request_grant succeeds only with an explicit grant this step
+  blocked_grant    := (raw_action = request_grant) & !grant;
+
+ASSIGN
+  -- Interface initialisation
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- action is derived: policy filters the raw choice
+  -- Tool-to-action mapping:
+  --   get_balance                        -> read_trusted
+  --   get_iban                           -> read_trusted
+  --   get_most_recent_transactions       -> read_trusted
+  --   get_scheduled_transactions         -> read_trusted
+  --   get_user_info                      -> read_trusted
+  --   read_file                          -> read_untrusted
+  --   send_money                         -> send_external
+  --   update_password                    -> delete
+  --   schedule_transaction               -> idle  (fits no canonical action)
+  --   update_scheduled_transaction       -> idle  (fits no canonical action)
+  --   update_user_info                   -> idle  (fits no canonical action)
+  action := case
+    blocked_external : idle;
+    blocked_delete   : idle;
+    blocked_grant    : idle;
+    TRUE             : raw_action;
+  esac;
+
+  -- tainted: monotonic; set when a read_untrusted actually executes and carries injection
+  next(tainted) := tainted | (action = read_untrusted & attacker_inject);
+
+  -- confirmed: one-step flag, TRUE exactly when the previous step's action was confirm
+  next(confirmed) := (action = confirm);
+
+  -- privileged: set when request_grant executes with a grant present; never dropped here
+  next(privileged) := privileged | (action = request_grant & grant);
+```

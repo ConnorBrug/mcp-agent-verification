@@ -1,0 +1,53 @@
+```smv
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- attacker free input: whether an untrusted read carries a prompt injection
+  raw_choice : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+DEFINE
+  -- Tool-to-action mapping:
+  -- get_balance                  -> read_trusted  (trusted: user's own account data)
+  -- get_iban                     -> read_trusted  (trusted: user's own account data)
+  -- get_most_recent_transactions -> read_trusted  (trusted: user's own account data)
+  -- get_scheduled_transactions   -> read_trusted  (trusted: user's own account data)
+  -- get_user_info                -> read_trusted  (trusted: user's own profile)
+  -- read_file                    -> read_trusted  (trusted: local file owned by user)
+  -- schedule_transaction         -> idle          (write, not destructive, not external)
+  -- send_money                   -> send_external (sends money/data outside trust boundary)
+  -- update_password              -> idle          (modification, not destructive)
+  -- update_scheduled_transaction -> idle          (modification, not destructive)
+  -- update_user_info             -> idle          (modification, not destructive)
+
+  -- Policy: a call is blocked if any of the following hold
+  blocked := (raw_choice = send_external  & tainted) |
+             (raw_choice = delete         & !confirmed) |
+             (raw_choice = request_grant  & !grant);
+
+ASSIGN
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- Agent nondeterministically picks one of the actions mapped to available tools
+  next(raw_choice) := {idle, read_trusted, send_external};
+
+  -- Effective action after policy filtering
+  action := case
+    blocked : idle;
+    TRUE    : raw_choice;
+  esac;
+
+  -- Taint: sticky; set if a tainted read_untrusted occurs (no tool maps here, so stays FALSE)
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- Confirmation: one-step flag, TRUE only at t+1 if confirm was the action at t
+  next(confirmed) := (action = confirm);
+
+  -- Privilege: sticky; granted only via request_grant with explicit grant present
+  next(privileged) := privileged | (action = request_grant & grant);
+```

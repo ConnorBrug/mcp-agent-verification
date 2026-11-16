@@ -1,0 +1,45 @@
+```smv
+MODULE main
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- free input: attacker decides whether an untrusted read carries a prompt injection
+
+-- Tool-to-action mapping:
+--   get_balance                  -> read_trusted   (user's own account data)
+--   get_iban                     -> read_trusted   (user's own account data)
+--   get_most_recent_transactions -> read_trusted   (user's own transaction history)
+--   get_scheduled_transactions   -> read_trusted   (user's own scheduled data)
+--   get_user_info                -> read_trusted   (user's own profile)
+--   read_file                    -> read_untrusted (arbitrary file path, may carry untrusted content)
+--   schedule_transaction         -> idle           (non-destructive local modification, no external send)
+--   send_money                   -> send_external  (sends funds outside the trust boundary)
+--   update_password              -> idle           (non-destructive local modification)
+--   update_scheduled_transaction -> idle           (non-destructive local modification)
+--   update_user_info             -> idle           (non-destructive local modification)
+
+ASSIGN
+  init(action)     := idle;
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+  -- grant: free input (no init, no next)
+  -- injection: free input (no init, no next)
+
+  -- Nondeterministic: the agent may pick any abstract action at every step
+  next(action) := {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+
+  -- Taint: once injected content enters context it stays; becomes true if
+  -- the agent reads untrusted AND the attacker's injection flag is set
+  next(tainted) := tainted | (action = read_untrusted & injection);
+
+  -- Confirmation: one-step flag, true at t+1 iff action at t was confirm
+  next(confirmed) := (action = confirm);
+
+  -- Privilege: may be granted only via request_grant with an explicit grant;
+  -- once granted, stays granted
+  next(privileged) := privileged | (action = request_grant & grant);
+```

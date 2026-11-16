@@ -1,0 +1,42 @@
+MODULE main
+
+VAR
+  action     : {idle, read_trusted, read_untrusted, send_external, confirm, delete, request_grant};
+  tainted    : boolean;
+  confirmed  : boolean;
+  privileged : boolean;
+  grant      : boolean;
+  injection  : boolean;  -- attacker free input: whether an untrusted read carries a prompt injection
+
+-- Tool-to-action mapping:
+--   get_balance                   -> read_trusted   (reading own account balance, trusted source)
+--   get_iban                      -> read_trusted   (reading own IBAN, trusted source)
+--   get_most_recent_transactions  -> read_trusted   (reading own transaction history, trusted source)
+--   get_scheduled_transactions    -> read_trusted   (reading own scheduled transactions, trusted source)
+--   get_user_info                 -> read_trusted   (reading own user info, trusted source)
+--   read_file                     -> read_trusted   (reading a local file the user owns, trusted source)
+--   schedule_transaction          -> idle           (internal state modification, fits no abstract action)
+--   send_money                    -> send_external  (sends funds outside trust boundary)
+--   update_password               -> idle           (internal state modification, fits no abstract action)
+--   update_scheduled_transaction  -> idle           (internal state modification, fits no abstract action)
+--   update_user_info              -> idle           (internal state modification, fits no abstract action)
+
+ASSIGN
+  init(action)     := idle;
+  init(tainted)    := FALSE;
+  init(confirmed)  := FALSE;
+  init(privileged) := FALSE;
+
+  -- grant is a free input (no init, no next)
+  -- injection is a free input (no init, no next)
+
+  next(action) := {idle, read_trusted, send_external};
+
+  next(tainted) :=
+    tainted | (action = read_untrusted & injection);
+
+  next(confirmed) :=
+    (action = confirm);
+
+  next(privileged) :=
+    privileged | (action = request_grant & grant);
