@@ -39,6 +39,38 @@ OUTPUT_RULES = """- One code block fenced with ```smv. No text outside it.
 - Record in `--` comments which tool maps to which abstract action.
 - The transition relation must be total: every state has a successor."""
 
+# Syntax reference only. The example is unrelated to agents so it gives away no mapping or policy.
+SMV_SYNTAX = """nuXmv is strict about syntax. Keywords are case-sensitive.
+- Comments start with `--` and run to the end of the line. `/* */` and `//` are not comments.
+- Sections: `VAR` (declarations), `DEFINE` (macros), `ASSIGN` (assignments). Every `init(x) := ...;` and `next(x) := ...;` line must be inside an `ASSIGN` section.
+- Keywords are lowercase: `init`, `next`, `case`, `esac`, `boolean`. Constants are `TRUE` and `FALSE`.
+- Operators: `&` (and), `|` (or), `!` (not), `->` (implies), `=` (equal), `!=` (not equal). There is no `==`, `&&`, `||`, `AND`, `OR`, or `if`/`else`.
+- A variable with no `init` and no `next` assignment is a free input: it can take any value at every step.
+- Nondeterministic choice is a set: `next(x) := {a, b, c};`.
+- A `case` ends with `esac;`. Its branches are `condition : value;` and the last one should be `TRUE : value;`.
+- Assign each variable at most once per kind: one `init(x)`, one `next(x)`, or one plain `x := ...;` (and a plain assignment excludes the other two).
+
+Example of valid syntax (an unrelated traffic light):
+```smv
+MODULE main
+VAR
+  light  : {red, green, yellow};
+  button : boolean;  -- free input: no assignment below
+  waited : boolean;
+DEFINE
+  may_go := light = red & waited;
+ASSIGN
+  init(light) := red;
+  init(waited) := FALSE;
+  next(light) := case
+    may_go         : {red, green};
+    light = green  : yellow;
+    light = yellow : red;
+    TRUE           : light;
+  esac;
+  next(waited) := waited | button;
+```"""
+
 REPAIR = """nuXmv or the interface check rejected your model:
 {feedback}
 
@@ -64,6 +96,7 @@ def build_messages(schemas, variant):
     parts = [
         "## Task\n" + TASK_COMMON + "\n" + (TASK_GUARDED if variant == "guarded" else TASK_UNGUARDED),
         "## Interface (mandatory)\n" + INTERFACE_DOC.read_text(encoding="utf-8"),
+        "## SMV syntax\n" + SMV_SYNTAX,
         "## Tools\n" + _tool_list(schemas),
     ]
     if variant == "guarded":
