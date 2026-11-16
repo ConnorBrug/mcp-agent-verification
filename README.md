@@ -212,6 +212,29 @@ See `pipeline/README.md`. In short, with a model served by Ollama:
 make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<model id>
 ```
 
+### 5. Demo
+
+```sh
+make demo
+```
+
+Runs nuXmv live on the hand-written reference models and on every LLM-written model in
+`models/generated/`, and prints the verdicts side by side with a summary per LLM (parse rate,
+agreement with the reference, false-safe rate). It takes about a second. It needs only nuXmv and
+`python3`: no `.venv`, no GPU, no LLM, no network.
+
+Nothing in the output is stored. Each run re-checks the current reference models, the current
+`properties/safety.ltl`, and whatever runs are in `models/generated/`, so the tables follow any
+change to those files. If a reference model is missing or fails to check, the demo says so and
+still shows the generated models' verdicts.
+
+```sh
+make demo DEMO_ARGS="--model qwen3.8:27b"   # one LLM only
+make demo DEMO_ARGS="--recorded"            # verdicts saved at generation time, without nuXmv
+```
+
+Without nuXmv on the `PATH`, `make demo` falls back to the recorded verdicts by itself.
+
 ### Make targets
 
 | Target | What it does |
@@ -221,6 +244,7 @@ make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<model id>
 | `make traces-json` | Parse the unguarded counterexamples to JSON |
 | `make test` | Pipeline tests (needs the `.venv`) |
 | `make generate` | LLM model generation (`SCENARIO`, `VARIANT`, `RUNS`, `MODEL`) |
+| `make demo` | nuXmv live on reference and generated models, with a comparison table |
 | `make clean` | Delete nuXmv logs and temp files in `traces/` |
 
 ## Docs

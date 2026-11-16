@@ -51,6 +51,13 @@ RUNS ?= 1
 generate:
 	$(VENV) -m pipeline.generate --scenario $(SCENARIO) --variant $(VARIANT) --runs $(RUNS) --model $(MODEL)
 
+# Demo: nuXmv live on the reference models and every LLM-written model, with a comparison table.
+# Needs only nuXmv and python3 (no .venv, no GPU, no LLM). Filter with DEMO_ARGS, e.g.
+#   make demo DEMO_ARGS="--model qwen3.8:27b"
+.PHONY: demo
+demo:
+	@$(PYTHON) -m pipeline.demo $(DEMO_ARGS)
+
 # $(1) = model name without extension, looked up in $(REF)
 define run_check
 	@command -v $(NUXMV) >/dev/null 2>&1 || { echo "error: '$(NUXMV)' not on PATH. See README, Install."; exit 1; }
