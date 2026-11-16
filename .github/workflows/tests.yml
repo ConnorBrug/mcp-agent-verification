@@ -1,0 +1,42 @@
+# Runs the pipeline tests and a smoke test of the demo on every push and pull request.
+#
+# nuXmv is not installed here: its license does not allow redistribution, and each person
+# downloads it (README, Install). The tests that need nuXmv skip themselves, and the demo runs in
+# --recorded mode. Run `make test` and `make demo` locally for the nuXmv checks.
+name: tests
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install test dependencies
+        run: pip install pytest requests
+      - name: Pipeline tests
+        run: python -m pytest -q tests
+      - name: Demo smoke test (recorded verdicts)
+        run: python -m pipeline.demo --recorded
+      - name: Generated runs are complete
+        run: |
+          python - <<'EOF'
+          import json, pathlib, sys
+          bad = []
+          for run in sorted(pathlib.Path("models/generated").glob("*/*/run_*")):
+              log = run / "run.json"
+              if not log.exists():
+                  bad.append(f"{run}: no run.json")
+                  continue
+              data = json.loads(log.read_text())
+              if data["final_ok"] and not (run / "final.smv").exists():
+                  bad.append(f"{run}: final_ok but no final.smv")
+          print("\n".join(bad) or "all run folders are complete")
+          sys.exit(1 if bad else 0)
+          EOF
