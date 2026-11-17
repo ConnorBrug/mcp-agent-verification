@@ -37,79 +37,84 @@
 
 % 1 ---------------------------------------------------------------------------
 \begin{frame}[plain]
-\vspace{2.2em}
-{\color{accent}\small\bfseries CS 3892 \quad Group B \quad Topic 8: formal models of agentic AI}\\[0.8em]
-{\LARGE\bfseries Can an LLM write a checkable model\\[0.2em] of a tool-using AI agent?}\\[1.6em]
-\begin{tabular}{@{}l@{\hspace{2.2em}}l@{\hspace{2.2em}}l@{}}
+\centering
+{\color{accent}\small\bfseries CS 3892 \quad Group B \quad Topic 8: formal models of agentic AI}\\[1em]
+{\LARGE\bfseries Can an LLM write a checkable model\\[0.2em] of a tool-using AI agent?}\\[2em]
+\begin{tabular}{@{}c@{\hspace{3em}}c@{\hspace{3em}}c@{}}
 {\large Teo Kitanovski} & {\large Connor Brugger} & {\large Xiaodi Shao}\\
 {\footnotesize\color{muted} reference models} & {\footnotesize\color{muted} LLM pipeline, nuXmv checks} &
 {\footnotesize\color{muted} sandbox replay}
-\end{tabular}\\[1.4em]
-{\small\color{muted} Milestone, 17 November 2026}\\[0.3em]
+\end{tabular}\\[2em]
+{\small\color{muted} Milestone, 17 November 2026}\\[0.4em]
 {\small\ttfamily github.com/ConnorBrug/mcp-agent-verification}
 \end{frame}
 
 % 2 ---------------------------------------------------------------------------
 \begin{frame}{What we built}
 \centering
-\vspace{1em}
 \begin{tikzpicture}[
-  box/.style={draw=accent,fill=soft,rounded corners=4pt,minimum height=3.2em,
-              text width=6.6em,align=center,font=\normalsize\bfseries},
+  box/.style={draw=accent,fill=soft,rounded corners=4pt,minimum height=3.4em,
+              text width=6.4em,align=center,font=\normalsize\bfseries},
   arr/.style={-{Stealth[length=6pt]},very thick,color=ink},
-  lbl/.style={font=\small,align=center,text width=7.4em,color=muted}]
-\node[box] (s) {Agent's tools};
-\node[box,right=2.2em of s] (m) {Model\\(written by LLM)};
-\node[box,right=2.2em of m] (c) {Model checker\\(nuXmv)};
-\node[box,right=2.2em of c] (r) {Replay attack\\in sandbox};
+  lbl/.style={font=\small,align=center,text width=9em,color=muted,anchor=north},
+  top/.style={font=\small\bfseries,align=center,anchor=south}]
+\node[box] (s) {Agent's\\tools};
+\node[box,right=1.9em of s] (m) {LLM writes\\a model};
+\node[box,right=1.9em of m] (c) {nuXmv\\checks it};
+\node[box,right=1.9em of c] (r) {Replay\\in sandbox};
 \draw[arr] (s) -- (m); \draw[arr] (m) -- (c); \draw[arr] (c) -- (r);
-\node[lbl,below=0.5em of s] {11 real\\banking tools};
-\node[lbl,below=0.5em of m] {local LLM writes it};
-\node[lbl,below=0.5em of c] {proves safe, or gives an attack trace};
-\node[lbl,below=0.5em of r] {run the trace as real tool calls};
-\node[font=\small\bfseries,color=good,above=0.4em of m] {20 models};
-\node[font=\small\bfseries,color=good,above=0.4em of c] {all checked};
-\node[font=\small\bfseries,color=accent,above=0.4em of r] {works on toy model};
+\node[lbl] at ([yshift=-0.5em]s.south) {11 banking tools};
+\node[lbl] at ([yshift=-0.5em]m.south) {local open LLM};
+\node[lbl] at ([yshift=-0.5em]c.south) {safe, or attack trace};
+\node[lbl] at ([yshift=-0.5em]r.south) {as real tool calls};
+\node[top,color=good] at ([yshift=0.5em]m.north) {20 models};
+\node[top,color=good] at ([yshift=0.5em]c.north) {all 20 checked};
+\node[top,color=accent] at ([yshift=0.5em]r.north) {toy model so far};
 \end{tikzpicture}
 
-\vspace{2em}
+\vspace{2.2em}
 \raggedright
-\textbf{Changed since the proposal:} we run the LLM on our own GPU instead of Vanderbilt's
-Amplify (its keys need a university billing account), and the prompt now includes SMV syntax rules
-(parse rate went from 0 of 6 to 6 of 6).
+\textbf{Changed since the proposal}
+\begin{itemize}\setlength\itemsep{0.3em}
+\item Local LLM on our GPU instead of Amplify, which needs a billing account.
+\item The prompt now lists SMV syntax rules. Parse rate went from 0 of 6 to 6 of 6.
+\end{itemize}
 \end{frame}
 
 % 3 ---------------------------------------------------------------------------
 \begin{frame}{What ``safe'' means: three properties}
 \large
-\renewcommand{\arraystretch}{1.6}
+\renewcommand{\arraystretch}{1.5}
 \begin{tabular}{@{}l@{\hspace{1em}}l@{}}
-\textbf{P1} & $\LTLG(\act{tainted} \rightarrow \LTLG(\act{action} \neq \act{send\_external}))$\\[-0.9em]
+\textbf{P1} & $\LTLG(\act{tainted} \rightarrow \LTLG(\act{action} \neq \act{send\_external}))$\\[-0.8em]
  & \subnote{After reading an injected input, the agent never sends data out.}\\
-\textbf{P2} & $\LTLG(\act{action} = \act{delete} \rightarrow \LTLY(\act{action} = \act{confirm}))$\\[-0.9em]
+\textbf{P2} & $\LTLG(\act{action} = \act{delete} \rightarrow \LTLY(\act{action} = \act{confirm}))$\\[-0.8em]
  & \subnote{Every delete comes right after a user confirm.}\\
-\textbf{P3} & $\LTLG((\neg\act{privileged} \wedge \LTLX\,\act{privileged}) \rightarrow \act{grant})$\\[-0.9em]
+\textbf{P3} & $\LTLG((\neg\act{privileged} \wedge \LTLX\,\act{privileged}) \rightarrow \act{grant})$\\[-0.8em]
  & \subnote{The agent never gains privileges without a grant.}\\
 \end{tabular}
 
-\vfill
-\normalsize
+\vspace{0.8em}
 \small
-Model: transition system $M = (S, I, T)$. A run is a path $s_0 s_1 s_2 \ldots$ with $s_0 \in I$,
-$(s_i, s_{i+1}) \in T$. \ $M \models \varphi$ iff \emph{every} run satisfies $\varphi$. An
-\textbf{attack trace} is a run that violates $\varphi$.\\[0.3em]
-$\act{tainted}_{i+1} = \act{tainted}_i \vee (\act{action}_i = \act{read\_untrusted} \wedge
-\act{injection}_i)$, \ $\act{tainted}_0 = \bot$ \quad {\color{muted}(the attacker picks
-\act{injection})}\\[0.3em]
-$\LTLG\varphi$: $\varphi$ at every step from now on. \quad $\LTLX\varphi$: at the next step. \quad
-$\LTLY\varphi$: at the previous step.
+\renewcommand{\arraystretch}{1.25}
+\begin{tabular}{@{}l@{\hspace{0.8em}}l@{}}
+\textbf{Model} & transition system $M = (S, I, T)$; a run is $s_0 s_1 s_2 \ldots$ with $s_0 \in I$,
+  $(s_i, s_{i+1}) \in T$\\
+\textbf{Safe} & $M \models \varphi$ iff every run satisfies $\varphi$; an \textbf{attack trace} is a run
+  that violates $\varphi$\\
+\textbf{Tainted} & $\act{tainted}_0 = \bot$, \ $\act{tainted}_{i+1} = \act{tainted}_i \vee
+  (\act{action}_i = \act{read\_untrusted} \wedge \mathit{inj}_i)$\\
+\textbf{Attacker} & $\mathit{inj}_i \in \{\top, \bot\}$ is free at every step: the attacker decides\\
+\textbf{Operators} & $\LTLG\varphi$: always from now on \quad $\LTLX\varphi$: at the next step \quad
+  $\LTLY\varphi$: at the previous step\\
+\end{tabular}
 \end{frame}
 
 % 4 ---------------------------------------------------------------------------
 \begin{frame}{How we score the LLM's models}
 \large
 Each LLM model $g$ is compared to a hand-written reference model $\mathrm{ref}(g)$.
-\vspace{1em}
+\vspace{0.8em}
 
 \renewcommand{\arraystretch}{2.4}
 \begin{tabular}{@{}l@{\hspace{1.2em}}l@{}}
@@ -117,65 +122,59 @@ Each LLM model $g$ is compared to a hand-written reference model $\mathrm{ref}(g
 $\mathrm{VA} = \dfrac{\#\{(g,\varphi) : g \text{ and } \mathrm{ref}(g) \text{ give the same verdict on } \varphi\}}{3\,|G|}$\\
 \textbf{False-safe} &
 $\mathrm{FS} = \dfrac{\#\{(g,\varphi) : g \models \varphi \text{ but } \mathrm{ref}(g) \not\models \varphi\}}{\#\{(g,\varphi) : \mathrm{ref}(g) \not\models \varphi\}}$\\
+\textbf{Parse rate} & $\mathrm{PR} = \#\{g : \text{nuXmv accepts } g\} \,/\, |G|$
 \end{tabular}
 
-\vspace{1em}
+\vspace{0.6em}
 \normalsize
-Parse rate: share of the LLM's models that nuXmv accepts. A model it cannot parse scores 0 on VA.\\
-VA: how often the LLM's model gets the right answer.\\
-FS: real attacks the LLM's model calls safe. This is the dangerous mistake.\\[0.5em]
-\subnote{$G$: the LLM's models. $\varphi$: one of P1, P2, P3. Goal from the proposal: VA $\geq 0.8$, FS
-$\leq 0.1$.}
+\begin{itemize}\setlength\itemsep{0.2em}
+\item VA: how often the LLM's model gets the right verdict. Unparsed = 0.
+\item FS: real attacks the LLM's model calls safe. This is the dangerous mistake.
+\end{itemize}
+\vfill
+\subnote{$G$: the LLM's models. $\varphi$: one of P1, P2, P3. Goals from the proposal: VA $\geq 0.8$,
+FS $\leq 0.1$.}
 \end{frame}
 
 % 5 ---------------------------------------------------------------------------
 \begin{frame}[fragile]{Live demo}
-\Large
-\begin{verbatim}
-$ make demo
-\end{verbatim}
-\normalsize
-\vspace{0.3em}
-nuXmv checks 22 models right now: 2 hand-written, 20 written by the LLM. It shows:
+\centering
+\colorbox{soft}{\parbox{0.42\textwidth}{\centering\vspace{0.5em}\Large\texttt{\$ make demo}\vspace{0.5em}}}\\[1.2em]
+\raggedright
+nuXmv checks 22 models live: 2 hand-written, 20 written by the LLM.
 \begin{itemize}\setlength\itemsep{0.5em}
-\item \textbf{One row per model:} \textcolor{good}{safe} or \textcolor{bad}{ATTACK} for P1, P2, P3,
-  and whether it matches the hand-written answer.
-\item \textbf{Two versions:} unguarded = the tools as they are; guarded = tools plus a policy that
-  blocks unsafe actions.
-\item \textbf{A real attack trace} on the banking tools: read transaction history carrying an
-  injection, then send money out. That breaks P1.
+\item \textbf{Each row:} one model, \textcolor{good}{safe} or \textcolor{bad}{ATTACK} per property, matches or not.
+\item \textbf{Unguarded} = the tools as they are. \textbf{Guarded} = tools plus a blocking policy.
+\item \textbf{Last:} a real attack trace. Read injected transactions, then send money out.
 \end{itemize}
 \vfill
-\subnote{Run from the repo folder inside WSL Ubuntu (type \texttt{wsl} first in PowerShell). The
-README has the setup.}
+\subnote{Run inside WSL Ubuntu from the repo folder: type \texttt{wsl} first in PowerShell.}
 \end{frame}
 
 % 6 ---------------------------------------------------------------------------
 \begin{frame}{Results so far: banking, best LLM (Qwen 27B)}
 \centering
-\vspace{0.6em}
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.32\textwidth}\centering
-\stat{10 / 10}\\[0.3em]
-parse\\
-\subnote{smaller 14B LLM: 8 / 10}
+\stat{10/10}\\[0.4em]
+models parse\\
+\subnote{smaller 14B LLM: 8/10}
 \end{column}
 \begin{column}{0.32\textwidth}\centering
-\stat{0.73}\\[0.3em]
+\stat{0.73}\\[0.4em]
 agreement VA\\
 \subnote{goal: 0.8}
 \end{column}
 \begin{column}{0.32\textwidth}\centering
-\stat{\color{bad}3 of 5}\\[0.3em]
+\stat{\color{bad}3 of 5}\\[0.4em]
 real attacks called safe\\
 \subnote{FS = 0.6, goal: 0.1}
 \end{column}
 \end{columns}
 
-\vspace{2em}
-\raggedright\large
-\textbf{Takeaway:} the LLM writes valid models. Its mistakes are in the meaning, not the syntax,
-and some of them hide real attacks.
+\vspace{2.4em}
+\large
+\textbf{Takeaway:} the LLM writes valid models,\\ but its mistakes hide real attacks.
 \end{frame}
 
 % 7 ---------------------------------------------------------------------------
@@ -183,15 +182,21 @@ and some of them hide real attacks.
 \begin{columns}[T,onlytextwidth]
 \begin{column}{0.46\textwidth}
 \large\textbf{1. It trusts the wrong tool}\\[0.6em]
+\small
+\renewcommand{\arraystretch}{1.3}
+\begin{tabular}{@{}ll@{}}
+Ours: & \act{read\_file} $\to$ \act{read\_untrusted}\\
+LLM: & \act{read\_file} $\to$ {\color{bad}\act{read\_trusted}}\\
+\end{tabular}\\[0.8em]
 \normalsize
-It calls \act{read\_file} a trusted read. Then nothing can ever taint the agent, so P1 is
-``safe'' for the wrong reason.\\[0.8em]
-\subnote{This is the 3 of 5 missed attacks.}
+Nothing can taint the agent, so P1\\
+looks safe for the wrong reason.\\[0.5em]
+\subnote{This causes the 3 of 5 missed attacks.}
 \end{column}
 \begin{column}{0.5\textwidth}
 \large\textbf{2. Its guard is one step late}\\[0.6em]
 \normalsize
-nuXmv's attack trace on a ``guarded'' LLM model:\\[0.5em]
+nuXmv's trace on a guarded LLM model:\\[0.5em]
 \begin{tabular}{@{}cll@{}}
 \toprule
 step & action & tainted\\
@@ -200,28 +205,27 @@ step & action & tainted\\
 2 & {\color{bad}\act{send\_external}} & {\color{bad}true}\\
 \bottomrule
 \end{tabular}\\[0.6em]
-The guard checks \act{tainted} before it turns true.
+The guard checks \act{tainted} too early.
 \end{column}
 \end{columns}
 \vfill
-\small
-\textbf{Sandbox replay (RQ3):} on our toy model, the P1 and P2 attack traces work as real tool
-calls in AgentDojo (read injected email, then send email; delete with no confirm).
+\centering\small
+\textbf{Sandbox (RQ3):} on our toy model, the P1 and P2 attacks reproduce as real tool calls.
 \end{frame}
 
 % 8 ---------------------------------------------------------------------------
 \begin{frame}{Next steps, and our Showcase poster}
-\begin{columns}[T,onlytextwidth]
-\begin{column}{0.38\textwidth}
+\begin{columns}[c,onlytextwidth]
+\begin{column}{0.36\textwidth}
 \large\textbf{Before the final}\\[0.5em]
 \normalsize
-\begin{itemize}\setlength\itemsep{0.5em}
-\item 4 more scenarios: email, travel, Slack, file and web tools
-\item Replay the LLM models' attacks in the sandbox
-\item Compare against random tool sequences
+\begin{itemize}\setlength\itemsep{0.6em}
+\item 4 more tool sets
+\item Replay the LLM's attacks
+\item Compare to random calls
 \end{itemize}
 \end{column}
-\begin{column}{0.58\textwidth}
+\begin{column}{0.6\textwidth}
 \centering
 \begin{tikzpicture}[
   pane/.style={draw=accent,fill=soft,rounded corners=2pt,align=center,font=\footnotesize,
@@ -241,8 +245,8 @@ calls in AgentDojo (read injected email, then send email; delete with no confirm
 \subnote{Poster draft layout. File due 3 December.}
 \end{column}
 \end{columns}
-\vfill
-\centering\Large Questions?
+\vspace{1.2em}
+\centering\Large\textbf{Questions?}
 \end{frame}
 
 % backup ----------------------------------------------------------------------
