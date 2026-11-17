@@ -166,6 +166,9 @@ def compact(args, live):
     n_models = 0
     print(_paint("nuXmv, running now on every model in the repo" if live else
                  "Verdicts saved at generation time (nuXmv not run)", "bold", color))
+    print("  safe         = nuXmv proved it holds on every possible run")
+    print("  ATTACK       = nuXmv found a run that breaks it")
+    print("  hand-written = our answer key. Numbered rows = models the LLM wrote.")
     for scenario in scenarios:
         for variant_dir in sorted((p for p in (GENERATED / scenario).iterdir() if p.is_dir()), reverse=True):
             variant = variant_dir.name
@@ -177,7 +180,8 @@ def compact(args, live):
             print(_paint(f"{scenario} {variant.upper()} ({label})", "bold", color))
             print(f"  {'':16}" + "".join(f"{names[n]:<10}" for n in (1, 2, 3)) + "same as hand-written?")
             if ref is not None:
-                print(f"  {'hand-written':16}" + "".join(cell(ref[n]) for n in (1, 2, 3)))
+                print(f"  {'hand-written':16}" + "".join(cell(ref[n]) for n in (1, 2, 3))
+                      + _paint("(answer key)", "dim", color))
             for run_dir in sorted(variant_dir.glob("run_*")):
                 log, verdicts, problem = _generated(run_dir, live)
                 if log is None:
@@ -221,6 +225,7 @@ def compact(args, live):
     if trace:
         print()
         print(_paint(f"nuXmv's attack trace for P1 on the hand-written {scenarios[0]} model", "bold", color))
+        print(_paint(f"  {'':8}{'tool the agent calls':30}{'action':16}{'taint':9}", "dim", color))
         for i, s in enumerate(trace, 1):
             tool = s.get("chosen_tool", "")
             inject = any(v == "TRUE" for k, v in s.items() if "inject" in k)
