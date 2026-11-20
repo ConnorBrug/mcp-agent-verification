@@ -7,11 +7,12 @@ back to the LLM, up to 3 repair rounds. Every reply and check result is logged.
 | File | What it does |
 |---|---|
 | `export_schemas.py` | Writes `schemas/<scenario>.json`: each tool's name, description, and inputSchema (MCP tool format). |
-| `prompt.py` | Builds the prompt (task, interface, SMV syntax, tools, policy for the guarded variant, output rules) and extracts SMV from a reply. |
+| `prompt.py` | Builds the prompt (task, interface, SMV syntax, tools, policy for the guarded variant, required structure, output rules) and extracts SMV from a reply. Version 1 is the milestone prompt; version 2 is the default (see below). |
 | `llm.py` | LLM clients: local OpenAI-compatible server (default), Amplify API, and a replay client for tests. |
-| `check.py` | Interface lint, then nuXmv: parse, deadlock check (`check_fsm`), and a verdict per property. |
+| `check.py` | Interface lint, then nuXmv: parse, deadlock check (`check_fsm`), and a verdict per property. For prompt v2 also the structure lint and the sanity checks. |
 | `generate.py` | The generate, check, repair loop and the run logs. |
 | `demo.py` | `make demo`: nuXmv live on the reference models and every generated model, with a comparison table. |
+| `example.py` | `make example`: the one-minute running example on one banking agent (the rent scam). |
 
 Scenarios: `workspace`, `travel`, `banking`, `slack` (AgentDojo v1.2), and `mcp` (fetch, git,
 filesystem reference servers). Variants: `unguarded` (schemas only) and `guarded` (schemas plus the
@@ -47,7 +48,7 @@ and Amplify only issues keys against a university billing account.
 From the repo root, inside WSL, after the setup in the main README:
 
 ```sh
-make test                                   # 22 tests, no model needed
+make test                                   # 39 tests, no model needed
 make generate SCENARIO=banking VARIANT=unguarded RUNS=5 MODEL=<model id>
 make demo                                   # check every generated model against the references
 ```
@@ -116,5 +117,59 @@ What the disagreements are, from reading the generated models and nuXmv's counte
 - **The two runs that never parsed** (`qwen2.5-coder:14b`, `unguarded/run_01` and
   `guarded/run_05`) used tool names such as `get_balance` as if they were declared symbols.
 
-Not computed yet: trace admissibility and the confirmed-violation rate (`docs/metrics.md`,
-sections 3 and 4).
+Trace admissibility (TA) and the confirmed-violation rate (CV), from `make metrics` on the v1
+runs (2026-11-19):
+
+| Model | TA | CV | Confirmed / found |
+|---|---|---|---|
+| `qwen2.5-coder:14b` | 0.00 | 0.25 | 4 of 16 |
+| `qwen3.8:27b` | 0.00 | 0.29 | 2 of 7 |
+
+- **TA is 0 for every v1 model, for one reason.** They all start with `init(action) := idle`, so
+  the agent's first step is always idle. The reference's P1 attack starts with a tool call at step
+  1, and admissibility compares runs step by step from the first state. With one idle step put in
+  front, `unguarded/run_08` admits the attack. So this 0 measures a modeling habit, not a missing
+  attack. The v2 structure has no `init(action)`.
+- **CV is far below the 0.7 target.** The confirmed violations are the P1 attacks in unguarded
+  models. The unconfirmed ones are the invented `delete` actions and every violation in a guarded
+  model (the guarded reference admits none), which come from the one-step-late policy.
+
+## Prompt version 2
+
+Each failure above has a fix in prompt version 2 (`PROMPT_VERSION` in `prompt.py`). The runs in
+`models/generated/banking/` so far are all version 1; `make demo-before` keeps showing them.
+
+| Failure in v1 | Fix in the prompt | Check that catches it if the LLM still gets it wrong |
+|---|---|---|
+| Untrusted reads labeled trusted, so the agent can never be tricked and P1 holds trivially | Trust rule: a read is `read_trusted` only if the user or the system wrote everything it returns | Sanity check: nuXmv tests whether `tainted` can ever become true. If not, the model goes back for repair |
+| `delete` and `confirm` allowed although no tool maps to them | Only actions some tool maps to may occur | Sanity check: every action that can happen must have a tool mapped to it |
+| Policy applied one step late through `next(action)` | Required structure: the agent picks a tool name (`chosen_tool`), and `action` follows from it in the same step | Structure lint: `action` must be a plain `action := ...;` |
+
+The required structure is the shape of the reference models: a free input `chosen_tool` over the
+tool names, one `chosen_tool = <tool> : <action>;` line per tool in a `proposed_action` case, and
+`action := proposed_action` (unguarded) or the policy applied to it (guarded). The LLM still
+decides every mapping and writes the policy and the flag updates. The structure makes the mapping
+readable by the checker, so the demo also reports **tool labels right**: the share of tools mapped
+to the same action as in the reference.
+
+The sanity checks use nuXmv reachability (invariants), not the safety properties:
+
+- `tainted` can never become true: P1 would hold vacuously.
+- An action that no tool maps to can happen (an invented action).
+- An action some tool maps to can never happen (a policy that blocks everything). `delete` is
+  exempt in the guarded variant, since the policy blocks it unless the user just confirmed.
+
+A model that passes nuXmv but fails a sanity check still counts as parsed. It only goes back to the
+LLM for repair. The v1 prompt is still in `prompt.py` (`build_messages(..., version=1)`), and a test
+checks that it reproduces the milestone runs' prompt hash.
+
+To rerun banking with v2 (on the machine with the GPU):
+
+```sh
+for v in unguarded guarded; do
+  make generate SCENARIO=banking VARIANT=$v RUNS=5 MODEL=qwen3.8:27b
+  make generate SCENARIO=banking VARIANT=$v RUNS=5 MODEL=qwen2.5-coder:14b
+done
+make demo           # v2 runs
+make demo-before    # v1 runs, for the before/after table
+```

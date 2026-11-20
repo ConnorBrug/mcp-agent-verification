@@ -234,9 +234,43 @@ still shows the generated models' verdicts.
 ```sh
 make demo DEMO_ARGS="--model qwen3.8:27b"   # one LLM only
 make demo DEMO_ARGS="--recorded"            # verdicts saved at generation time, without nuXmv
+make demo-before                            # the milestone runs (prompt v1), to compare
 ```
 
-Without nuXmv on the `PATH`, `make demo` falls back to the recorded verdicts by itself.
+Without nuXmv on the `PATH`, `make demo` falls back to the recorded verdicts by itself. Each run
+records the prompt version that produced it. `make demo` shows the newest version present.
+
+### 6. Running example (one minute)
+
+```sh
+make example
+```
+
+One banking agent, one attack, four live nuXmv results. The user asks the agent to pay rent; a
+transaction note written by a stranger tricks it into sending money.
+
+1. Hand-written model, no safety rule: nuXmv finds the two-step attack.
+2. A model the LLM wrote (`banking/unguarded/run_06`): nuXmv says safe, because the LLM labeled
+   the transaction history as trusted. The proof is about the wrong model.
+3. The sanity check asks nuXmv whether the agent can ever be tricked in that model. It cannot,
+   so the repair loop sends the model back to the LLM.
+4. Hand-written model with the safety rule: nuXmv proves it safe.
+
+### 7. RQ2 and RQ3 on banking
+
+```sh
+make metrics           # trace admissibility and confirmed-violation rate (docs/metrics.md, 3 and 4)
+make replay-banking    # the rent-scam trace on AgentDojo's real banking tools
+```
+
+`make metrics` asks nuXmv, for each attack found on the reference, whether the LLM's model allows
+the same run (TA), and for each attack found on an LLM model, whether the reference allows it (CV).
+`make metrics METRICS_ARGS=--list` prints one line per attack.
+
+`make replay-banking` executes nuXmv's two-step attack with the real tool calls and checks that
+the planted text reaches the agent and that the transfer goes through. It also checks every
+`read_trusted` / `read_untrusted` label of the banking reference model against the environment.
+The result is in `traces/replay/banking_rent_scam.json`.
 
 ### Make targets
 
@@ -247,7 +281,12 @@ Without nuXmv on the `PATH`, `make demo` falls back to the recorded verdicts by 
 | `make traces-json` | Parse the unguarded counterexamples to JSON |
 | `make test` | Pipeline tests (needs the `.venv`) |
 | `make generate` | LLM model generation (`SCENARIO`, `VARIANT`, `RUNS`, `MODEL`) |
+| `make generate-all` | The same for every scenario and both variants (`RUNS`, `MODEL`, optional `SCENARIOS`) |
+| `make metrics` | Trace admissibility and confirmed-violation rate |
+| `make replay-banking` | Replay the banking attack trace on AgentDojo's banking tools |
 | `make demo` | nuXmv live on reference and generated models, with a comparison table |
+| `make demo-before` | The same table for the milestone runs (prompt v1) |
+| `make example` | The one-minute running example (the rent scam) |
 | `make clean` | Delete nuXmv logs and temp files in `traces/` |
 
 ## Docs

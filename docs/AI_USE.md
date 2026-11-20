@@ -67,3 +67,17 @@ Entry format:
   make the results easy to check and present.
 - **Human review:** Connor Brugger ran the tests and the demo with nuXmv, and read the prompt's
   syntax section and a generated model against the demo output.
+
+## 2026-11-19: Prompt version 2 and the running example
+
+- **Tool and model:** Claude Code, Claude Opus 5.5 (written) and Claude Fable 5.2 (review and fixes).
+- **Who ran it:** Connor Brugger.
+- **What it produced:** Prompt version 2 in `pipeline/prompt.py` (trust rule, tool-only actions,
+  required structure), the structure lint and sanity checks in `pipeline/check.py`, prompt-version
+  handling in `pipeline/demo.py`, `pipeline/example.py` (`make example`), new tests, and README
+  updates. No LLM-generated models were added; the v2 rerun is still to do. Also `eval/metrics.py`
+  (`make metrics`), `sandbox/replay_banking.py` (`make replay-banking`) and its result in
+  `traces/replay/banking_rent_scam.json`, and `make generate-all`.
+- **Prompt summary:** Raise verdict agreement and lower the false-safe rate on banking, and build
+  a one-minute running example for the poster, as the instructor asked after the milestone.
+- **Human review:** Pending.

@@ -26,5 +26,27 @@ environment (a new sent email, or one fewer file).
 Results are in `traces/replay/`. `taint_controls.txt` records the control run: without the
 injection no read surfaces the canary; with it, four reads do.
 
+## Banking
+
+`replay_banking.py` (`make replay-banking`) does the same for the banking suite, with two
+differences. It uses the tool names in nuXmv's trace (the banking reference model has a
+`chosen_tool` variable), so no action-to-tool map is needed. And it checks the reference model's
+trust labels: for each tool mapped to a read, does text planted in AgentDojo's four injection
+slots show up in the tool's output?
+
+Result (`traces/replay/banking_rent_scam.json`, 2026-11-19):
+
+| Tool | Reference label | Planted text surfaces |
+|---|---|---|
+| `get_balance`, `get_iban`, `get_user_info` | `read_trusted` | no |
+| `get_most_recent_transactions`, `read_file` | `read_untrusted` | yes |
+| `get_scheduled_transactions` | `read_untrusted` | no |
+
+The two-step P1 trace (`get_most_recent_transactions`, then `send_money`) is reproduced: the
+planted text appears in the transaction history, and the transfer adds a transaction. The control
+run without planted text does not taint. `get_scheduled_transactions` is the one label AgentDojo
+does not back up: v1.2 has no injection slot in the scheduled transactions, so the reference is
+more cautious than the benchmark there.
+
 Limit: this is tool-level replay, not agent-driven. It shows the environment allows the attack
 sequence. It does not show that an LLM agent would choose that sequence.

@@ -51,17 +51,45 @@ RUNS ?= 1
 generate:
 	$(VENV) -m pipeline.generate --scenario $(SCENARIO) --variant $(VARIANT) --runs $(RUNS) --model $(MODEL)
 
+# Every scenario, both variants, e.g. make generate-all MODEL=qwen3.8:27b RUNS=5
+# Limit the scenarios with SCENARIOS="banking slack".
+SCENARIOS ?= banking workspace slack travel mcp
+.PHONY: generate-all
+generate-all:
+	@for s in $(SCENARIOS); do for v in unguarded guarded; do \
+		$(VENV) -m pipeline.generate --scenario $$s --variant $$v --runs $(RUNS) --model $(MODEL) || exit 1; \
+	done; done
+
 # Demo: nuXmv live on the reference models and every LLM-written model, compared with the reference.
 # Needs only nuXmv and python3 (no .venv, no GPU, no LLM). `make demo` is the short layout for a
 # projector (plus one attack trace); `make demo-full` prints every formula and the metric table.
 # Filter with DEMO_ARGS, e.g.
 #   make demo DEMO_ARGS="--model qwen3.8:27b"
-.PHONY: demo demo-full
+.PHONY: demo demo-full demo-before example
 demo:
 	@$(PYTHON) -m pipeline.demo --compact $(DEMO_ARGS)
 
 demo-full:
 	@$(PYTHON) -m pipeline.demo $(DEMO_ARGS)
+
+# The same table for the milestone (prompt v1) runs, to compare with the newest prompt.
+demo-before:
+	@$(PYTHON) -m pipeline.demo --compact --prompt-version 1 $(DEMO_ARGS)
+
+# The one-minute running example for the poster: the rent scam on one banking agent.
+example:
+	@$(PYTHON) -m pipeline.example $(EXAMPLE_ARGS)
+
+# Trace admissibility and confirmed-violation rate (docs/metrics.md, sections 3 and 4). Needs nuXmv.
+.PHONY: metrics replay-banking
+metrics:
+	@$(PYTHON) -m eval.metrics $(METRICS_ARGS)
+
+# Replay the rent-scam trace on AgentDojo's real banking tools (needs the .venv and nuXmv).
+replay-banking:
+	@mkdir -p $(TRACES)/replay
+	@$(VENV) -W ignore -m sandbox.replay_banking > $(TRACES)/replay/banking_rent_scam.json
+	@echo "wrote $(TRACES)/replay/banking_rent_scam.json"
 
 # $(1) = model name without extension, looked up in $(REF)
 define run_check

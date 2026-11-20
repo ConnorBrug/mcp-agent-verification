@@ -30,7 +30,7 @@ Settings shared by all of them, including the ones `run.json` does not record:
 | Seed | none, so runs are not reproducible token for token |
 | Repairs | up to 3 |
 | Hardware | RTX 4080 16 GB. `qwen2.5-coder:14b` ran 93% on the GPU, `qwen3.8:27b` 65% GPU and 35% CPU |
-| Prompt | with the SMV syntax section (`pipeline/README.md`). Hashes start `ecbdf3f0` (unguarded) and `0b64730c` (guarded) |
+| Prompt | version 1, with the SMV syntax section (`pipeline/README.md`). Hashes start `ecbdf3f0` (unguarded) and `0b64730c` (guarded) |
 
 `guarded/run_10` was generated a few minutes after the others. The first attempt at it was lost
 when the machine crashed before the run wrote any file, so it was run again. No run was discarded
@@ -40,7 +40,11 @@ The model id in `run.json` is the Ollama tag. It names the model, not an exact b
 the digest from `ollama list` if a run has to be tied to one. For these runs: `9ec8897f747e`
 (`qwen2.5-coder:14b`) and `aaee06c39dcf` (`qwen3.8:27b`).
 
-To see the verdicts of every run next to the reference models, run `make demo` from the repo root.
+Runs made with prompt version 2 or later record `prompt_version` in `run.json`; runs without it
+are version 1. Add their settings to the table above when they are committed.
+
+To see the verdicts of every run next to the reference models, run `make demo` from the repo root
+(newest prompt version) or `make demo-before` (version 1).
 
 Commit runs exactly as generated. Do not hand-fix them; failures are data for the parse-rate
 metric. Parse rate before repair comes from attempt 0, after repair from the last attempt.

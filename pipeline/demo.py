@@ -12,6 +12,10 @@ the reference models, the property file, or the set of generated runs.
 
 --recorded skips nuXmv for the generated models and shows the verdicts saved in each run.json at
 generation time. It is also the automatic fallback when nuXmv is not installed.
+
+Generated runs carry the prompt version that produced them (pipeline/prompt.py). The demo shows the
+newest version present unless --prompt-version picks another (make demo-before shows version 1).
+Each run is scored with the check of its own version.
 """
 import argparse
 import json
@@ -24,7 +28,8 @@ import time
 from collections import defaultdict
 from pathlib import Path
 
-from pipeline.check import PROPERTIES, check_model
+from pipeline.check import PROPERTIES, check_model, tool_mapping
+from pipeline.prompt import load_schemas, tool_names
 
 REPO = Path(__file__).resolve().parent.parent
 REFERENCE = REPO / "models" / "reference"
@@ -66,24 +71,50 @@ def _reference(scenario, variant, live):
     return result.verdicts, None
 
 
-def _generated(run_dir, live):
-    """(log, verdicts or None, problem or None) for one run folder."""
-    log_path, model_path = run_dir / "run.json", run_dir / "final.smv"
-    if not log_path.exists():
-        return None, None, "no run.json (run did not finish)"
-    log = json.loads(log_path.read_text(encoding="utf-8"))
+def _version(log):
+    return log.get("prompt_version", 1)
+
+
+def _load_log(run_dir):
+    path = run_dir / "run.json"
+    return json.loads(path.read_text(encoding="utf-8")) if path.exists() else None
+
+
+def pick_version(scenarios, wanted=None):
+    """The prompt version to show: wanted if given, else the newest one among the generated runs."""
+    if wanted:
+        return wanted
+    found = {_version(log) for sc in scenarios for log in map(_load_log, (GENERATED / sc).glob("*/run_*")) if log}
+    return max(found, default=1)
+
+
+def _tools(scenario):
+    try:
+        return tool_names(load_schemas(scenario))
+    except FileNotFoundError:
+        return None
+
+
+def _generated(run_dir, live, scenario=None, variant=None):
+    """(log, verdicts or None, problem or None, tool mapping) for one run folder.
+    The parse verdict is well_formed (lint + nuXmv); sanity problems do not count against it."""
+    log, model_path = _load_log(run_dir), run_dir / "final.smv"
+    if log is None:
+        return None, None, "no run.json (run did not finish)", {}
     if not live:
         last = log["attempts"][-1]
-        return log, (last.get("verdicts") if last.get("ok") else None), None if last.get("ok") else "did not parse"
+        good = last.get("well_formed", last.get("ok"))
+        return log, (last.get("verdicts") if good else None), None if good else "did not parse", last.get("mapping") or {}
     if not model_path.exists():
-        return log, None, "the LLM never produced an SMV model"
-    result = check_model(model_path.read_text(encoding="utf-8"))
-    if result.ok:
-        return log, result.verdicts, None
+        return log, None, "the LLM never produced an SMV model", {}
+    tools = _tools(scenario) if _version(log) >= 2 and scenario else None
+    result = check_model(model_path.read_text(encoding="utf-8"), tools=tools, variant=variant)
+    if result.well_formed:
+        return log, result.verdicts, None, result.mapping
     problems = result.interface_errors + result.nuxmv_errors
     if result.parsed and result.total is False:
         problems.append("transition relation is not total")
-    return log, None, (problems[0] if problems else "did not parse")
+    return log, None, (problems[0] if problems else "did not parse"), result.mapping
 
 
 STATE_LINE = re.compile(r"^\s*-> State: \d+\.\d+ <-")
@@ -164,8 +195,10 @@ def compact(args, live):
 
     per_llm = defaultdict(lambda: defaultdict(float))
     n_models = 0
+    version = pick_version(scenarios, args.prompt_version)
     print(_paint("nuXmv, running now on every model in the repo" if live else
-                 "Verdicts saved at generation time (nuXmv not run)", "bold", color))
+                 "Verdicts saved at generation time (nuXmv not run)", "bold", color)
+          + _paint(f"  (LLM models from prompt v{version})", "dim", color))
     print("  safe         = nuXmv proved it holds on every possible run")
     print("  ATTACK       = nuXmv found a run that breaks it")
     print("  hand-written = our answer key. Numbered rows = models the LLM wrote.")
@@ -174,6 +207,8 @@ def compact(args, live):
             variant = variant_dir.name
             ref, _ = _reference(scenario, variant, live)
             ref = by_number(ref) if ref else None
+            ref_path = REFERENCE / f"{scenario}_{variant}.smv"
+            ref_map = tool_mapping(ref_path.read_text(encoding="utf-8")) if ref_path.exists() else {}
             n_models += ref is not None
             label = "tools as they are" if variant == "unguarded" else "tools + a safety policy"
             print()
@@ -183,12 +218,13 @@ def compact(args, live):
                 print(f"  {'hand-written':16}" + "".join(cell(ref[n]) for n in (1, 2, 3))
                       + _paint("(answer key)", "dim", color))
             for run_dir in sorted(variant_dir.glob("run_*")):
-                log, verdicts, problem = _generated(run_dir, live)
-                if log is None:
+                log = _load_log(run_dir)
+                if log is None or _version(log) != version:
                     continue
                 model = log["llm"].get("model", "?")
                 if args.model and model != args.model:
                     continue
+                log, verdicts, problem, mapping = _generated(run_dir, live, scenario, variant)
                 n_models += 1
                 s = per_llm[model]
                 s["runs"] += 1
@@ -197,6 +233,9 @@ def compact(args, live):
                     print(f"  {tag:16}" + _paint("nuXmv could not parse it", "dim", color))
                     continue
                 s["parsed"] += 1
+                if ref_map and mapping:
+                    s["mapped"] += 1
+                    s["labels"] += sum(mapping.get(t) == a for t, a in ref_map.items()) / len(ref_map)
                 v = by_number(verdicts)
                 line = f"  {tag:16}" + "".join(cell(v[n]) for n in (1, 2, 3))
                 if ref is not None:
@@ -212,13 +251,16 @@ def compact(args, live):
 
     print()
     print(_paint("Summary per LLM", "bold", color))
-    print(f"  {'':20}{'parses':<10}{'agreement':<12}real attacks it called safe")
+    labels = any(s["mapped"] for s in per_llm.values())
+    print((f"  {'':20}{'parses':<10}{'agreement':<12}{'real attacks it called safe':<30}"
+           + ("tool labels right" if labels else "")).rstrip())
     for model, s in sorted(per_llm.items()):
         n = int(s["runs"])
         missed = f"{int(s['missed'])} of {int(s['ref_attacks'])}" if s["ref_attacks"] else "n/a"
         parses = "%d/%d" % (s["parsed"], n)
         agreement = "%.2f" % (s["agree"] / n) if s["compared"] else "n/a"
-        print(f"  {model:20}{parses:<10}{agreement:<12}{missed}")
+        right = ("%.2f" % (s["labels"] / s["mapped"]) if s["mapped"] else "n/a") if labels else ""
+        print(f"  {model:20}{parses:<10}{agreement:<12}{missed:<30}{right}".rstrip())
 
     ref_path = REFERENCE / f"{scenarios[0]}_unguarded.smv"
     trace = attack_trace(ref_path) if live and ref_path.exists() else None
@@ -247,6 +289,7 @@ def main(argv=None):
     ap.add_argument("--scenario", help="only this scenario (default: every folder in models/generated)")
     ap.add_argument("--model", help="only runs generated by this model id")
     ap.add_argument("--recorded", action="store_true", help="show verdicts saved in run.json instead of re-running nuXmv")
+    ap.add_argument("--prompt-version", type=int, help="only runs from this prompt version (default: the newest present)")
     ap.add_argument("--compact", action="store_true",
                     help="short layout for a projector: one row per model, a summary per LLM, and one attack trace")
     args = ap.parse_args(argv)
@@ -267,6 +310,8 @@ def main(argv=None):
         print("No generated runs found under models/generated/.")
         return 1
 
+    version = pick_version(scenarios, args.prompt_version)
+    print(f"LLM models from prompt version {version}.")
     # per (model, scenario, variant): counters for the summary
     stats = defaultdict(lambda: defaultdict(float))
     # Number properties by their position in properties/safety.ltl, not by how nuXmv orders its
@@ -298,7 +343,10 @@ def main(argv=None):
             else:
                 print("   reference (hand-written):   " + "   ".join(f"{label(f)} {_mark(ref[f])}" for f in in_order(ref)))
             for run_dir in sorted(variant_dir.glob("run_*")):
-                log, verdicts, problem = _generated(run_dir, live)
+                log = _load_log(run_dir)
+                if log is not None and _version(log) != version:
+                    continue
+                log, verdicts, problem, _ = _generated(run_dir, live, scenario, variant)
                 if log is None:
                     print(f"   {run_dir.name}  skipped: {problem}")
                     continue
@@ -307,7 +355,8 @@ def main(argv=None):
                     continue
                 s = stats[(model, scenario, variant)]
                 s["runs"] += 1
-                s["first"] += bool(log["attempts"][0].get("ok"))
+                first = log["attempts"][0]
+                s["first"] += bool(first.get("well_formed", first.get("ok")))  # parse, not the sanity checks
                 if verdicts is None:
                     print(f"   {run_dir.name}  {model:20}  DOES NOT PARSE: {str(problem)[:70]}")
                     continue

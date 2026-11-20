@@ -22,7 +22,8 @@ from pathlib import Path
 
 from pipeline.check import check_model
 from pipeline.llm import LOCAL_URL, AmplifyClient, LocalClient, list_local_models, list_models
-from pipeline.prompt import VARIANTS, build_messages, extract_smv, load_schemas, prompt_sha256, repair_message
+from pipeline.prompt import (PROMPT_VERSION, VARIANTS, build_messages, extract_smv, load_schemas, prompt_sha256,
+                             repair_message, tool_names)
 
 REPO = Path(__file__).resolve().parent.parent
 OUT_DIR = REPO / "models" / "generated"
@@ -43,15 +44,21 @@ def _next_run_dir(base):
     return d
 
 
-def generate_one(client, scenario, variant, max_repairs=3, out_dir=OUT_DIR, check=check_model):
+def generate_one(client, scenario, variant, max_repairs=3, out_dir=OUT_DIR, check=None):
+    """One run. check defaults to the prompt v2 check: interface and structure lint, nuXmv, and the
+    sanity checks, so a model that is well formed but vacuous goes back to the LLM for repair."""
     schemas = load_schemas(scenario)
     messages = build_messages(schemas, variant)
+    if check is None:
+        def check(smv):
+            return check_model(smv, tools=tool_names(schemas), variant=variant)
     run_dir = _next_run_dir(Path(out_dir) / scenario / variant)
     log = {
         "scenario": scenario,
         "variant": variant,
         "schema_source": schemas["source"],
         "llm": client.describe(),
+        "prompt_version": PROMPT_VERSION,
         "prompt_sha256": prompt_sha256(messages),
         "max_repairs": max_repairs,
         "started_at": _now(),
